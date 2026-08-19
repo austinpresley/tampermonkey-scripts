@@ -1,63 +1,36 @@
-# Tampermonkey Scripts
+# Austin Presley's Userscripts
 
-Public monorepo for readable Tampermonkey userscripts whose published copies are synchronized by Greasy Fork from GitHub `main`.
+[![Validate userscripts](https://github.com/austinpresley/tampermonkey-scripts/actions/workflows/validate-userscripts.yml/badge.svg)](https://github.com/austinpresley/tampermonkey-scripts/actions/workflows/validate-userscripts.yml)
 
-The repository currently tracks four scripts already published under the [austinpresley Greasy Fork profile](https://greasyfork.org/en/users/1549077-austinpresley). Their one-time GitHub source-sync and repository webhook configuration remains pending.
+Small browser enhancements for downloading images, exploring galleries, and improving creative tools. Install them through [Greasy Fork](https://greasyfork.org/en/users/1549077-austinpresley) with Tampermonkey, Violentmonkey, or another compatible userscript manager.
 
-## Layout
+## Available scripts
 
-Each script lives at `scripts/<slug>/<slug>.user.js`, with its supporting notes at `scripts/<slug>/README.md`. `userscripts.json` is the inventory and publication-status record. Allowed statuses are:
+| Script | Works on | What it does | Install |
+| --- | --- | --- | --- |
+| [NerdyTeachers Top200: Add PICO-8 cart download links](scripts/nerdyteachers-top200-pico8-download/README.md) | NerdyTeachers / Lexaloffle | Adds a direct cart download action to every game in the PICO-8 Top 200 list. | [Greasy Fork](https://greasyfork.org/en/scripts/563795-nerdyteachers-top200-add-pico-8-cart-download-links) |
+| [Google Slides: Open/Download selected images](scripts/google-slides-image-actions/README.md) | Google Slides | Opens or downloads one or more selected slide images from the right-click menu. | [Greasy Fork](https://greasyfork.org/en/scripts/559190-google-slides-open-download-selected-images) |
+| [Pinterest Board Image Downloader](scripts/pinterest-board-image-downloader/README.md) | Pinterest | Scans a board, optionally loads more pins, and downloads the collected images. | [Greasy Fork](https://greasyfork.org/en/scripts/563977-pinterest-board-image-downloader) |
+| [Depop Gallery Zoom](scripts/depop-gallery-zoom/README.md) | Depop | Adds a full-screen gallery with zoom, pan, thumbnails, keyboard controls, and touch gestures. | [Greasy Fork](https://greasyfork.org/en/scripts/591977-depop-gallery-zoom) |
 
-- `draft`: under development; not publishable.
-- `ready`: validated and intentionally prepared for its first Greasy Fork import.
-- `published`: linked to a live Greasy Fork listing.
+## Install a script
 
-An exceptional namespace may be represented by `namespace` and a nonempty `namespaceReason` on its manifest entry. A non-MIT script license is recorded explicitly as `license`. Published names, namespaces, and paths should otherwise remain stable.
+1. Install a userscript manager such as [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/).
+2. Open a script's Greasy Fork link in the table above.
+3. Choose **Install this script**, review the requested site access and permissions, then confirm the installation.
 
-## Create a script
+Updates are delivered through Greasy Fork and your userscript manager. You do not need to download files from this repository manually.
 
-Start from the generator rather than copying a folder:
+## Privacy and permissions
 
-```sh
-npm run new -- \
-  --name "Example Name" \
-  --slug example-name \
-  --description "Describe the behavior precisely" \
-  --match "https://example.com/*"
-```
+The scripts run in your browser and request only the page access and browser capabilities needed for their features. Each script's linked README documents its supported sites, external connections, and manual testing notes. The source is readable and unminified.
 
-Repeat `--match` for multiple page patterns. Run `npm run new -- --help` for all options. The generator creates the script and README without overwriting an existing path and registers the script in `userscripts.json`.
+## Help and feedback
 
-The generated script begins at `1.0.0` unless `--version` is supplied. Replace the implementation placeholder, choose only the grants the code needs, document manual tests, and keep matches narrow.
+If a script stops working or you have an idea, [open a GitHub issue](https://github.com/austinpresley/tampermonkey-scripts/issues). Include the script name, affected page, browser, userscript manager, and steps to reproduce the problem.
 
-## Validate
+## Source and licenses
 
-```sh
-npm test
-```
+Source code lives under [`scripts/`](scripts/). Each userscript's metadata header and README state its license; repository tooling and scripts marked MIT are covered by the root [MIT license](LICENSE).
 
-Validation checks the inventory, paths, userscript metadata, namespace, semantic versions, JavaScript syntax, placeholders, duplicates, and likely secrets. The version check compares changed existing userscripts with the available Git base and requires a strictly higher `@version`. New files may begin at any valid numeric semantic version.
-
-Run an individual command when useful:
-
-```sh
-npm run validate
-npm run check:versions
-npm run raw-urls
-```
-
-## Versioning and publication
-
-Every code or metadata change to an existing userscript that could be published needs a higher numeric semantic version (`MAJOR.MINOR.PATCH`). Use a focused branch and pull request for normal work. GitHub Actions runs `npm test`; the user reviews and authorizes merging.
-
-Only `main` is a publication boundary. Merging to `main` makes the branch-based raw file current and can trigger Greasy Fork's repository webhook for scripts already registered there. GitHub Actions validates—it does not upload code to Greasy Fork.
-
-`npm run raw-urls` prints each manifest entry's stable, branch-based raw URL. Never configure Greasy Fork with a commit-pinned URL.
-
-## First-time Greasy Fork work
-
-Every brand-new script must be imported manually once from its raw GitHub URL. After import, record its Greasy Fork ID and URL in the manifest and script README. The four existing listings need their source-sync URLs pointed at this repository before the webhook is enabled. See [docs/GREASY_FORK_SETUP.md](docs/GREASY_FORK_SETUP.md) for the exact checklist.
-
-The root MIT license covers repository tooling and scripts marked MIT. Scripts whose metadata and manifest specify another license remain under that stated license.
-
-For headless maintenance and safe `codex exec` examples, see [docs/HEADLESS_CODEX.md](docs/HEADLESS_CODEX.md).
+Repository development and release details are kept in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).

@@ -1,6 +1,8 @@
-# Repository instructions
+# Agent-led repository instructions
 
-Before editing, read the root `README.md`, `userscripts.json`, and the affected script's README.
+This repository is agent-led: coding agents are the primary maintainers for routine implementation, validation, documentation, and pull-request preparation. Human authorization still controls merges, Greasy Fork publication, credentials, and consequential external actions.
+
+Before editing, read `docs/DEVELOPMENT.md`, `userscripts.json`, and the affected script's README. Read the root `README.md` when a change affects the end-user experience.
 
 - Keep each userscript at `scripts/<slug>/<slug>.user.js` and keep `userscripts.json` synchronized.
 - Start scripts with `npm run new -- ...`; do not copy an existing script folder.
