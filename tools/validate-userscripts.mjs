@@ -141,7 +141,14 @@ for (const relativePath of userscriptFiles) {
   }
   if (version && !semverPattern.test(version)) report(relativePath, '@version must use numeric semantic version format, such as 1.0.0.');
   if (description && /^(?:todo|tbd|description|script_description)$/i.test(description)) report(relativePath, '@description is still a placeholder.');
-  if (license && license !== 'MIT') report(relativePath, '@license must be MIT unless repository policy is deliberately updated.');
+  const expectedLicense = entry?.license ?? 'MIT';
+  if (license && license !== expectedLicense) report(relativePath, `@license must agree with manifest license "${expectedLicense}".`);
+  for (const managedUrl of ['downloadURL', 'updateURL', 'installURL']) {
+    if (metadata.has(managedUrl)) report(relativePath, `must not define @${managedUrl}; Greasy Fork manages installed update URLs.`);
+  }
+  if ((metadata.get('author') ?? []).some((value) => /^(?:you|your name|author)$/i.test(value))) {
+    report(relativePath, '@author contains a placeholder value.');
+  }
 
   const unresolvedTemplate = /(?:\{\{[A-Z_]+\}\}|SCRIPT_NAME|SCRIPT_DESCRIPTION|MATCH_PATTERN|REPOSITORY_(?:NAMESPACE|URL))/i;
   if (unresolvedTemplate.test(source)) report(relativePath, 'contains an unresolved template placeholder.');

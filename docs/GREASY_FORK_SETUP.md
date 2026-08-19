@@ -1,8 +1,24 @@
 # Greasy Fork setup
 
-Status: **pending**. There is no real userscript or Greasy Fork listing yet, so import and webhook delivery cannot honestly be verified.
+Status: **GitHub migration pending**. Four real Greasy Fork listings are recorded in `userscripts.json`; their GitHub source URLs and the repository webhook still need to be configured in an authenticated, user-controlled Greasy Fork session.
 
-## First real script
+## Migrate the four existing listings
+
+After the import pull request is reviewed and merged to `main`:
+
+1. Run `npm run raw-urls` and keep the four printed branch-based URLs.
+2. Sign in to Greasy Fork and open each script's source synchronization settings.
+3. Replace its source URL with the matching raw GitHub URL and enable automatic synchronization.
+4. Confirm the preview shows the expected migration version and metadata before saving:
+   - NerdyTeachers Top200: `1.0.4`
+   - Google Slides image actions: `1.8.2`
+   - Pinterest Board Image Downloader: `2.1.2`
+   - Depop Gallery Zoom: `1.0.1`
+5. Confirm each listing updates successfully before configuring the shared repository webhook below.
+
+The migration versions remove Greasy Fork-injected update URLs and add GitHub homepage/support metadata. Depop also receives MIT license metadata and a non-placeholder author. Executable behavior is unchanged by the migration.
+
+## First new script
 
 1. Create and test the script locally.
 2. Merge or push the validated script to `main`.
@@ -16,7 +32,7 @@ Do not put passwords, cookies, tokens, or webhook secrets in this repository.
 
 ## Configure the repository webhook
 
-Do this only after at least one Greasy Fork listing is linked to a raw file in this repository.
+Do this only after at least one Greasy Fork listing—preferably all four existing listings—is linked to a raw file in this repository.
 
 1. Open Greasy Fork's webhook setup page while signed in.
 2. Obtain the GitHub payload URL and webhook secret Greasy Fork generates for your account.

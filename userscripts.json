@@ -4,5 +4,50 @@
     "ready",
     "published"
   ],
-  "userscripts": []
+  "userscripts": [
+    {
+      "slug": "nerdyteachers-top200-pico8-download",
+      "name": "NerdyTeachers Top200: Add PICO-8 cart download links",
+      "path": "scripts/nerdyteachers-top200-pico8-download/nerdyteachers-top200-pico8-download.user.js",
+      "greasyForkId": 563795,
+      "greasyForkUrl": "https://greasyfork.org/en/scripts/563795-nerdyteachers-top200-add-pico-8-cart-download-links",
+      "status": "published",
+      "namespace": "https://github.com/austinpresley/",
+      "namespaceReason": "Preserved from the published Greasy Fork script.",
+      "license": "GPL-3.0-or-later"
+    },
+    {
+      "slug": "google-slides-image-actions",
+      "name": "Google Slides: Open/Download selected images",
+      "path": "scripts/google-slides-image-actions/google-slides-image-actions.user.js",
+      "greasyForkId": 559190,
+      "greasyForkUrl": "https://greasyfork.org/en/scripts/559190-google-slides-open-download-selected-images",
+      "status": "published",
+      "namespace": "https://github.com/austinpresley/",
+      "namespaceReason": "Preserved from the published Greasy Fork script.",
+      "license": "GPL-3.0-or-later"
+    },
+    {
+      "slug": "pinterest-board-image-downloader",
+      "name": "Pinterest Board Image Downloader",
+      "path": "scripts/pinterest-board-image-downloader/pinterest-board-image-downloader.user.js",
+      "greasyForkId": 563977,
+      "greasyForkUrl": "https://greasyfork.org/en/scripts/563977-pinterest-board-image-downloader",
+      "status": "published",
+      "namespace": "https://github.com/austinpresley",
+      "namespaceReason": "Preserved from the published Greasy Fork script.",
+      "license": "GPL-3.0-or-later"
+    },
+    {
+      "slug": "depop-gallery-zoom",
+      "name": "Depop Gallery Zoom",
+      "path": "scripts/depop-gallery-zoom/depop-gallery-zoom.user.js",
+      "greasyForkId": 591977,
+      "greasyForkUrl": "https://greasyfork.org/en/scripts/591977-depop-gallery-zoom",
+      "status": "published",
+      "namespace": "https://depop.com/",
+      "namespaceReason": "Preserved from the published Greasy Fork script.",
+      "license": "MIT"
+    }
+  ]
 }
