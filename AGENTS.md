@@ -4,7 +4,7 @@ Before editing, read the root `README.md`, `userscripts.json`, and the affected 
 
 - Keep each userscript at `scripts/<slug>/<slug>.user.js` and keep `userscripts.json` synchronized.
 - Start scripts with `npm run new -- ...`; do not copy an existing script folder.
-- Preserve a published script's `@name`, `@namespace`, and path unless a deliberate migration is approved.
+- Preserve a published script's `@name`, `@namespace`, license, and path unless a deliberate migration is approved.
 - Increment `@version` for every publishable code or metadata change.
 - Keep userscripts readable, unminified, unobfuscated, and compliant with Greasy Fork rules.
 - Use the narrowest practical `@match`/`@include` patterns and Tampermonkey grants.
