@@ -1,0 +1,28 @@
+{
+  "name": "tampermonkey-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tampermonkey userscripts synchronized with Greasy Fork",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/austinpresley/tampermonkey-scripts.git"
+  },
+  "userscriptRepository": {
+    "owner": "austinpresley",
+    "name": "tampermonkey-scripts",
+    "defaultBranch": "main",
+    "namespace": "https://github.com/austinpresley/tampermonkey-scripts"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "new": "node tools/create-userscript.mjs",
+    "validate": "node tools/validate-userscripts.mjs",
+    "check:versions": "node tools/check-version-bumps.mjs",
+    "raw-urls": "node tools/list-raw-urls.mjs",
+    "test": "npm run validate && npm run check:versions"
+  }
+}

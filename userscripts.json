@@ -1,0 +1,8 @@
+{
+  "allowedStatuses": [
+    "draft",
+    "ready",
+    "published"
+  ],
+  "userscripts": []
+}

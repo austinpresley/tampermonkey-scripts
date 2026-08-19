@@ -1,0 +1,41 @@
+name: Validate userscripts
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/validate-userscripts.yml'
+      - 'scripts/**'
+      - 'templates/**'
+      - 'tools/**'
+      - 'package.json'
+      - 'userscripts.json'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/validate-userscripts.yml'
+      - 'scripts/**'
+      - 'templates/**'
+      - 'tools/**'
+      - 'package.json'
+      - 'userscripts.json'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 24 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Validate repository
+        run: npm test
