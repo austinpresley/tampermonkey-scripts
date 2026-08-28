@@ -50,9 +50,9 @@
       "license": "MIT"
     },
     {
-      "slug": "facebook-marketplace-saved-sidebar",
-      "name": "Facebook Marketplace: Saved items in sidebar",
-      "path": "scripts/facebook-marketplace-saved-sidebar/facebook-marketplace-saved-sidebar.user.js",
+      "slug": "facebook-marketplace-buyer-workspace",
+      "name": "Facebook Marketplace Buyer Workspace",
+      "path": "scripts/facebook-marketplace-buyer-workspace/facebook-marketplace-buyer-workspace.user.js",
       "greasyForkId": null,
       "greasyForkUrl": null,
       "status": "draft"
