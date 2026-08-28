@@ -1,9 +1,10 @@
 // ==UserScript==
 // @name         Facebook Marketplace: Saved items in sidebar
 // @namespace    https://github.com/austinpresley/tampermonkey-scripts
-// @version      1.0.1
-// @description  Adds a Saved items shortcut to the Facebook Marketplace sidebar.
+// @version      1.0.2
+// @description  Adds Marketplace Saved items and Back to Marketplace shortcuts.
 // @match        https://www.facebook.com/marketplace/*
+// @match        https://www.facebook.com/saved/*
 // @grant        none
 // @run-at       document-idle
 // @license      MIT
@@ -14,8 +15,11 @@
 (() => {
   'use strict';
 
-  const ITEM_ATTRIBUTE = 'data-facebook-marketplace-saved-sidebar';
-  const LABEL = 'Saved items';
+  const MARKETPLACE_ITEM_ATTRIBUTE = 'data-facebook-marketplace-saved-sidebar';
+  const BACK_ITEM_ATTRIBUTE = 'data-facebook-saved-back-to-marketplace';
+  const BACK_FALLBACK_ATTRIBUTE = 'data-facebook-saved-back-fallback';
+  const SAVED_LABEL = 'Saved items';
+  const BACK_LABEL = 'Back to Marketplace';
   const MARKETPLACE_PATH = '/marketplace';
   const SAVED_PATH = '/saved/';
   const SAVED_URL = `${SAVED_PATH}?dashboard_section=PRODUCTS`;
@@ -112,7 +116,7 @@
     }
   }
 
-  function replaceLabel(link, oldLabel) {
+  function replaceLabel(link, oldLabel, newLabel) {
     const walker = document.createTreeWalker(link, NodeFilter.SHOW_TEXT);
     const textNodes = [];
 
@@ -123,13 +127,13 @@
     let replacements = 0;
     for (const textNode of textNodes) {
       if (textNode.nodeValue.trim() !== oldLabel) continue;
-      textNode.nodeValue = textNode.nodeValue.replace(oldLabel, LABEL);
+      textNode.nodeValue = textNode.nodeValue.replace(oldLabel, newLabel);
       replacements += 1;
     }
 
     if (!replacements && textNodes.length) {
       const textNode = textNodes[textNodes.length - 1];
-      textNode.nodeValue = textNode.nodeValue.replace(textNode.nodeValue.trim(), LABEL);
+      textNode.nodeValue = textNode.nodeValue.replace(textNode.nodeValue.trim(), newLabel);
     }
   }
 
@@ -150,12 +154,29 @@
     return svg;
   }
 
-  function replaceIcon(link) {
-    const icon = link.querySelector('i[aria-hidden="true"], i[data-visualcompletion], svg[aria-hidden="true"], img[aria-hidden="true"]');
-    if (icon) icon.replaceWith(bookmarkIcon());
+  function backIcon() {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    svg.style.width = '20px';
+    svg.style.height = '20px';
+    svg.style.display = 'block';
+    svg.style.fill = 'currentColor';
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'm12 4 1.41 1.41L7.83 11H20v2H7.83l5.58 5.59L12 20l-8-8 8-8Z');
+    svg.append(path);
+
+    return svg;
   }
 
-  function makeSavedRow(sourceLink) {
+  function replaceIcon(link, makeIcon) {
+    const icon = link.querySelector('i[aria-hidden="true"], i[data-visualcompletion], svg[aria-hidden="true"], img[aria-hidden="true"]');
+    if (icon) icon.replaceWith(makeIcon());
+  }
+
+  function makeSidebarRow(sourceLink, { attribute, href, label, makeIcon }) {
     const sourceRow = findMenuRow(sourceLink);
     const clonedRow = sourceRow.cloneNode(true);
     const clonedLink = correspondingLink(sourceRow, clonedRow, sourceLink);
@@ -164,30 +185,23 @@
     const oldLabel = (sourceLink.innerText || sourceLink.textContent || '').trim();
 
     removeIds(clonedRow);
-    clonedRow.setAttribute(ITEM_ATTRIBUTE, '');
-    clonedLink.setAttribute('href', SAVED_URL);
-    clonedLink.setAttribute('aria-label', LABEL);
+    clonedRow.setAttribute(attribute, '');
+    clonedLink.setAttribute('href', href);
+    clonedLink.setAttribute('aria-label', label);
     clonedLink.removeAttribute('aria-current');
     clonedLink.querySelectorAll('[aria-current]').forEach((element) => {
       element.removeAttribute('aria-current');
     });
-    if (clonedLink.hasAttribute('title')) clonedLink.setAttribute('title', LABEL);
+    if (clonedLink.hasAttribute('title')) clonedLink.setAttribute('title', label);
 
-    replaceLabel(clonedLink, oldLabel);
-    replaceIcon(clonedLink);
+    replaceLabel(clonedLink, oldLabel, label);
+    replaceIcon(clonedLink, makeIcon);
 
     return { clonedRow, sourceRow };
   }
 
-  function render() {
-    renderQueued = false;
-
-    const installedRows = Array.from(document.querySelectorAll(`[${ITEM_ATTRIBUTE}]`));
-    if (!normalizedPath(location.pathname).startsWith(MARKETPLACE_PATH)) {
-      installedRows.forEach((row) => row.remove());
-      return;
-    }
-
+  function renderMarketplaceShortcut() {
+    const installedRows = Array.from(document.querySelectorAll(`[${MARKETPLACE_ITEM_ATTRIBUTE}]`));
     if (installedRows.some((row) => row.isConnected)) return;
     if (Array.from(document.querySelectorAll('a[href]')).some(isProductSavesLink)) return;
 
@@ -197,11 +211,88 @@
     const referenceLink = sellingLink || browseLink || createListingLink;
     if (!referenceLink) return;
 
-    const savedRow = makeSavedRow(referenceLink);
+    const savedRow = makeSidebarRow(referenceLink, {
+      attribute: MARKETPLACE_ITEM_ATTRIBUTE,
+      href: SAVED_URL,
+      label: SAVED_LABEL,
+      makeIcon: bookmarkIcon,
+    });
     if (!savedRow) return;
 
     if (sellingLink || createListingLink) savedRow.sourceRow.after(savedRow.clonedRow);
     else savedRow.sourceRow.before(savedRow.clonedRow);
+  }
+
+  function makeBackFallback() {
+    const link = document.createElement('a');
+    link.setAttribute(BACK_ITEM_ATTRIBUTE, '');
+    link.setAttribute(BACK_FALLBACK_ATTRIBUTE, '');
+    link.setAttribute('href', `${MARKETPLACE_PATH}/`);
+    link.setAttribute('aria-label', BACK_LABEL);
+    link.style.position = 'fixed';
+    link.style.left = '16px';
+    link.style.bottom = '16px';
+    link.style.zIndex = '999999';
+    link.style.display = 'flex';
+    link.style.alignItems = 'center';
+    link.style.gap = '8px';
+    link.style.minHeight = '40px';
+    link.style.padding = '0 14px';
+    link.style.borderRadius = '8px';
+    link.style.background = 'var(--primary-button-background, #0866ff)';
+    link.style.color = 'var(--primary-button-text, #fff)';
+    link.style.boxShadow = '0 2px 8px rgba(0, 0, 0, .24)';
+    link.style.fontFamily = 'inherit';
+    link.style.fontSize = '15px';
+    link.style.fontWeight = '600';
+    link.style.textDecoration = 'none';
+    link.style.outlineOffset = '2px';
+    link.append(backIcon(), BACK_LABEL);
+    return link;
+  }
+
+  function renderSavedPageShortcut() {
+    const installedRows = Array.from(document.querySelectorAll(`[${BACK_ITEM_ATTRIBUTE}]`));
+    const savedSidebarLink = findSidebarLink('/saved');
+
+    if (savedSidebarLink) {
+      installedRows
+        .filter((row) => row.hasAttribute(BACK_FALLBACK_ATTRIBUTE))
+        .forEach((row) => row.remove());
+      if (installedRows.some((row) => row.isConnected && !row.hasAttribute(BACK_FALLBACK_ATTRIBUTE))) return;
+
+      const backRow = makeSidebarRow(savedSidebarLink, {
+        attribute: BACK_ITEM_ATTRIBUTE,
+        href: `${MARKETPLACE_PATH}/`,
+        label: BACK_LABEL,
+        makeIcon: backIcon,
+      });
+      if (backRow) backRow.sourceRow.before(backRow.clonedRow);
+      return;
+    }
+
+    if (!installedRows.some((row) => row.isConnected)) {
+      document.body.append(makeBackFallback());
+    }
+  }
+
+  function isMarketplacePage() {
+    return normalizedPath(location.pathname).startsWith(MARKETPLACE_PATH);
+  }
+
+  function isProductSavesPage() {
+    return normalizedPath(location.pathname) === normalizedPath(SAVED_PATH)
+      && new URLSearchParams(location.search).get('dashboard_section') === 'PRODUCTS';
+  }
+
+  function render() {
+    renderQueued = false;
+
+    if (isMarketplacePage()) renderMarketplaceShortcut();
+    else document.querySelectorAll(`[${MARKETPLACE_ITEM_ATTRIBUTE}]`).forEach((row) => row.remove());
+
+    if (isProductSavesPage()) renderSavedPageShortcut();
+    else document.querySelectorAll(`[${BACK_ITEM_ATTRIBUTE}]`).forEach((row) => row.remove());
   }
 
   function queueRender() {

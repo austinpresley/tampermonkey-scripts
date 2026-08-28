@@ -17,9 +17,9 @@ const desktopRectangle = {
   height: 38,
 };
 
-function marketplaceWindow(html) {
+function facebookWindow(url, html) {
   const window = new Window({
-    url: 'https://www.facebook.com/marketplace/search/?query=weird',
+    url,
   });
   window.document.body.innerHTML = html;
 
@@ -50,7 +50,7 @@ async function runUserscript(window) {
 }
 
 test('adds Saved items below Create new listing on Marketplace search results', async () => {
-  const window = marketplaceWindow(`
+  const window = facebookWindow('https://www.facebook.com/marketplace/search/?query=weird', `
     <aside aria-label="Marketplace">
       <h1>Search results</h1>
       <input aria-label="Search Marketplace" value="weird">
@@ -73,4 +73,48 @@ test('adds Saved items below Create new listing on Marketplace search results', 
   assert.equal(savedRow.previousElementSibling?.textContent.trim(), 'Create new listing');
   const savedLink = savedRow.matches('a') ? savedRow : savedRow.querySelector('a');
   assert.equal(savedLink?.pathname, '/saved/');
+});
+
+test('adds Back to Marketplace to the Saved sidebar', async () => {
+  const window = facebookWindow('https://www.facebook.com/saved/?dashboard_section=PRODUCTS', `
+    <aside aria-label="Saved">
+      <h1>Saved</h1>
+      <div class="row">
+        <a href="/saved/?dashboard_section=ALL">
+          <span class="icon"><i aria-hidden="true" data-visualcompletion="css-img"></i></span>
+          <span>All</span>
+        </a>
+      </div>
+      <div class="row">
+        <a href="/saved/?dashboard_section=PRODUCTS" aria-current="page">
+          <span class="icon"><i aria-hidden="true" data-visualcompletion="css-img"></i></span>
+          <span>Products</span>
+        </a>
+      </div>
+    </aside>
+  `);
+
+  await runUserscript(window);
+
+  const backRow = window.document.querySelector('[data-facebook-saved-back-to-marketplace]');
+  assert.ok(backRow, 'Back to Marketplace should appear on saved-products pages');
+  const backLink = backRow.matches('a') ? backRow : backRow.querySelector('a');
+  assert.equal(backLink?.pathname, '/marketplace/');
+  assert.equal(backLink?.textContent.trim(), 'Back to Marketplace');
+  assert.equal(backRow.nextElementSibling?.textContent.trim(), 'All');
+  assert.ok(backLink?.querySelector('svg path'), 'uses a back-arrow icon');
+});
+
+test('uses a fixed Back to Marketplace button until the Saved sidebar is available', async () => {
+  const window = facebookWindow('https://www.facebook.com/saved/?dashboard_section=PRODUCTS', `
+    <main><h1>Saved items</h1></main>
+  `);
+
+  await runUserscript(window);
+
+  const backLink = window.document.querySelector('[data-facebook-saved-back-fallback]');
+  assert.ok(backLink, 'a fallback button should appear while the sidebar is unavailable');
+  assert.equal(backLink.pathname, '/marketplace/');
+  assert.equal(backLink.textContent.trim(), 'Back to Marketplace');
+  assert.equal(backLink.style.position, 'fixed');
 });
