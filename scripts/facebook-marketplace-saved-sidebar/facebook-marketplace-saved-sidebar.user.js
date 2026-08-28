@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Facebook Marketplace: Saved items in sidebar
 // @namespace    https://github.com/austinpresley/tampermonkey-scripts
-// @version      1.0.0
+// @version      1.0.1
 // @description  Adds a Saved items shortcut to the Facebook Marketplace sidebar.
 // @match        https://www.facebook.com/marketplace/*
 // @grant        none
@@ -50,14 +50,18 @@
     return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
   }
 
-  function findSidebarLink(pathname) {
+  function findSidebarLink(pathname, includeNestedPaths = false) {
     const targetPath = normalizedPath(pathname);
 
     return Array.from(document.querySelectorAll('a[href]')).find((link) => {
       const url = linkUrl(link);
+      const pathnameMatches = url && (
+        normalizedPath(url.pathname) === targetPath
+        || (includeNestedPaths && normalizedPath(url.pathname).startsWith(`${targetPath}/`))
+      );
       return url
         && url.origin === location.origin
-        && normalizedPath(url.pathname) === targetPath
+        && pathnameMatches
         && isVisibleSidebarLink(link);
     }) || null;
   }
@@ -189,13 +193,14 @@
 
     const sellingLink = findSidebarLink('/marketplace/you/selling');
     const browseLink = findSidebarLink('/marketplace');
-    const referenceLink = sellingLink || browseLink;
+    const createListingLink = findSidebarLink('/marketplace/create', true);
+    const referenceLink = sellingLink || browseLink || createListingLink;
     if (!referenceLink) return;
 
     const savedRow = makeSavedRow(referenceLink);
     if (!savedRow) return;
 
-    if (sellingLink) savedRow.sourceRow.after(savedRow.clonedRow);
+    if (sellingLink || createListingLink) savedRow.sourceRow.after(savedRow.clonedRow);
     else savedRow.sourceRow.before(savedRow.clonedRow);
   }
 

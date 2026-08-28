@@ -24,6 +24,10 @@
     "check:versions": "node tools/check-version-bumps.mjs",
     "raw-urls": "node tools/list-raw-urls.mjs",
     "test-url": "node tools/print-test-url.mjs",
-    "test": "npm run validate && npm run check:versions"
+    "test:behavior": "node --test tests/*.test.mjs",
+    "test": "npm run validate && npm run check:versions && npm run test:behavior"
+  },
+  "devDependencies": {
+    "happy-dom": "^20.0.10"
   }
 }
