@@ -48,6 +48,14 @@
       "namespace": "https://depop.com/",
       "namespaceReason": "Preserved from the published Greasy Fork script.",
       "license": "MIT"
+    },
+    {
+      "slug": "facebook-marketplace-saved-sidebar",
+      "name": "Facebook Marketplace: Saved items in sidebar",
+      "path": "scripts/facebook-marketplace-saved-sidebar/facebook-marketplace-saved-sidebar.user.js",
+      "greasyForkId": null,
+      "greasyForkUrl": null,
+      "status": "draft"
     }
   ]
 }
