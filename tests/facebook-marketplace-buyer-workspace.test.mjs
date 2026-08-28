@@ -166,6 +166,28 @@ function listing({ id, title, price = '$100', location = 'Boston, Massachusetts'
   `;
 }
 
+function liveDivListing({ id, title, label, labelMarkup = '', labelOutsideLink = false }) {
+  const renderedLabel = labelMarkup || `<span>${label}</span>`;
+  const labelInsideLink = labelOutsideLink ? '' : renderedLabel;
+  const labelOutside = labelOutsideLink ? renderedLabel : '';
+  return `
+    <div data-live-listing-id="${id}">
+      <div><span><div><div><div><div>
+        <a
+          role="link"
+          aria-label="${title}, $100, , listing ${id}"
+          href="/marketplace/item/${id}/?ref=browse_tab"
+        >
+          <div>
+            <img alt="${title} in " src="https://example.test/${id}.jpg">
+            <span>$100</span><span>${title}</span>${labelInsideLink}
+          </div>
+        </a>
+      </div></div></div></div></span></div>${labelOutside}
+    </div>
+  `;
+}
+
 function resultsPage(listings) {
   return `
     ${marketplaceSidebar()}
@@ -215,6 +237,12 @@ async function setControl(window, control, value) {
   await settle(260);
 }
 
+async function setCheckbox(window, control, checked) {
+  control.checked = checked;
+  control.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await settle(260);
+}
+
 function reasonText(listingCard) {
   return [...listingCard.querySelectorAll('[data-fbmw-reason]')]
     .map((element) => element.textContent.trim())
@@ -246,6 +274,14 @@ function assertNotDimmed(listingCard) {
 
 function listingAction(listingCard, name) {
   return buttonNamed(listingCard, name);
+}
+
+async function setDisposition(window, listingCard, value) {
+  await setControl(window, controlNamed(listingCard, /buyer status/i), value);
+}
+
+function assertDisposition(listingCard, expected) {
+  assert.equal(controlNamed(listingCard, /buyer status/i).value, expected);
 }
 
 function assertPressed(button, expected = true) {
@@ -343,6 +379,156 @@ test('dims sponsored and shipped listings by default and labels the reasons', as
   assertDimmed(card(window, '1104'), /Sponsored|Ad/i);
 });
 
+test('dims signals inside Facebook div-based listing cards', async () => {
+  const { window } = facebookWindow(
+    'https://www.facebook.com/marketplace/',
+    `${marketplaceSidebar()}<main><section aria-label="Marketplace results">
+      ${liveDivListing({ id: '1104', title: 'Delivered camera', label: 'Ships to you' })}
+      ${liveDivListing({
+        id: '1105',
+        title: 'Promoted camera',
+        label: 'Sponsored',
+        labelOutsideLink: true,
+      })}
+      ${liveDivListing({ id: '1106', title: 'Sponsored camera stand', label: 'Atlanta, GA' })}
+      ${liveDivListing({
+        id: '1108',
+        title: 'Nested delivery label',
+        label: 'Ships to you',
+        labelMarkup: '<span>Ships <span>to you</span></span>',
+      })}
+    </section></main>`,
+  );
+
+  await runUserscript(window);
+
+  const delivered = window.document
+    .querySelector('[data-live-listing-id="1104"] a')
+    .closest('[data-fbmw-card]');
+  const promoted = window.document
+    .querySelector('[data-live-listing-id="1105"] a')
+    .closest('[data-fbmw-card]');
+  const ordinary = window.document
+    .querySelector('[data-live-listing-id="1106"] a')
+    .closest('[data-fbmw-card]');
+  const nestedDelivery = window.document
+    .querySelector('[data-live-listing-id="1108"] a')
+    .closest('[data-fbmw-card]');
+  assert.ok(delivered, 'current Facebook div card is recognized');
+  assert.ok(promoted, 'current Facebook div card is recognized');
+  assert.ok(ordinary, 'ordinary Facebook div card is recognized');
+  assert.ok(nestedDelivery, 'a nested native badge stays recognizable');
+  assert.equal(delivered, window.document.querySelector('[data-live-listing-id="1104"]'));
+  assert.equal(promoted, window.document.querySelector('[data-live-listing-id="1105"]'));
+  assert.equal(
+    window.document.querySelector('section[aria-label="Marketplace results"]').hasAttribute('data-fbmw-card'),
+    false,
+    'the results collection is never treated as one listing card',
+  );
+  assertDimmed(delivered, /Ship(?:s|ping)/i);
+  assertDimmed(promoted, /Sponsored|Ad/i);
+  assertDimmed(nestedDelivery, /Ship(?:s|ping)/i);
+  assertNotDimmed(ordinary);
+
+  const workspace = window.document.querySelector('[data-fbmw-workspace]');
+  await setCheckbox(window, controlNamed(workspace, /dim ships to you/i), false);
+  await setCheckbox(window, controlNamed(workspace, /dim sponsored/i), false);
+  assertNotDimmed(delivered);
+  assertNotDimmed(promoted);
+  assertNotDimmed(nestedDelivery);
+});
+
+test('does not claim a neutral one-result collection as the listing card', async () => {
+  const { window } = facebookWindow(
+    'https://www.facebook.com/marketplace/',
+    `${marketplaceSidebar()}<main>
+      <div data-neutral-results>
+        ${liveDivListing({ id: '1107', title: 'Local camera', label: 'Atlanta, GA' })}
+      </div>
+    </main>`,
+  );
+
+  await runUserscript(window);
+
+  const anchor = window.document.querySelector('[data-live-listing-id="1107"] a');
+  assert.equal(anchor.closest('[data-fbmw-card]'), window.document.querySelector('[data-live-listing-id="1107"]'));
+  assert.equal(window.document.querySelector('[data-neutral-results]').hasAttribute('data-fbmw-card'), false);
+});
+
+test('uses plain-language filter and hidden-listing controls', async () => {
+  const { window } = facebookWindow(
+    'https://www.facebook.com/marketplace/',
+    resultsPage([listing({ id: '1150', title: 'Local camera' })]),
+  );
+  await runUserscript(window);
+
+  const workspace = window.document.querySelector('[data-fbmw-workspace]');
+  elementNamed(workspace, 'summary', /text matching: contains this text/i);
+  const matching = controlNamed(workspace, /text matching/i);
+  assert.deepEqual(
+    [...matching.options].map((option) => option.textContent.trim()),
+    ['Contains this text', 'Use AND / OR', 'Regular expression (advanced)'],
+  );
+  const query = controlNamed(workspace, /filter.*listings|search.*results/i);
+  const help = workspace.querySelector(`#${query.getAttribute('aria-describedby')}`);
+  assert.match(help?.textContent || '', /same order|matches.*text/i);
+
+  const showHidden = controlNamed(workspace, /include listings hidden by me/i);
+  assert.equal(showHidden.type, 'checkbox');
+  assert.match(workspace.textContent, /hide from results removes a card until this is turned on/i);
+
+  await setControl(window, matching, 'boolean');
+  elementNamed(workspace, 'summary', /text matching: use and \/ or/i);
+  assert.match(help.textContent, /use and to require both/i);
+});
+
+test('uses an always-visible fixed listing toolbar instead of hover-revealed controls', async () => {
+  const { window } = facebookWindow(
+    'https://www.facebook.com/marketplace/',
+    resultsPage([listing({ id: '1151', title: 'Local camera' })]),
+  );
+  await runUserscript(window);
+
+  const listingCard = card(window, '1151');
+  const toolbar = listingCard.querySelector('[data-fbmw-listing-toolbar]');
+  assert.ok(toolbar, 'listing toolbar is always present');
+  controlNamed(toolbar, /buyer status/i);
+  buttonNamed(toolbar, /favorite/i);
+  const more = elementNamed(toolbar, 'details', /private note|hide from results/i);
+  elementNamed(more, 'summary', /more buyer actions/i);
+  controlNamed(toolbar, /private note|note for listing/i);
+  buttonNamed(toolbar, /hide from results/i);
+
+  const menuPanel = more.querySelector('.fbmw-listing-menu-panel');
+  assert.equal(more.open, false);
+  assert.equal(window.getComputedStyle(menuPanel).display, 'none');
+  more.open = true;
+  assert.equal(window.getComputedStyle(menuPanel).display, 'grid');
+
+  const styles = window.document.querySelector('[data-fbmw-style]').textContent;
+  assert.doesNotMatch(styles, /fbmw-listing-actions[^{}]*:hover|data-fbmw-active/);
+  assert.match(styles, /fbmw-listing-menu-panel[^{}]*\{[^}]*position:\s*absolute/s);
+  assert.match(styles, /\.fbmw-open\s*\{[^}]*background:\s*var\(--fbmw-button\)/s);
+});
+
+test('overrides Facebook dark-mode heading and field-label colors', async () => {
+  const { window } = facebookWindow(
+    'https://www.facebook.com/marketplace/',
+    resultsPage([listing({ id: '1152', title: 'Local camera' })]),
+  );
+  window.document.documentElement.style.setProperty('--primary-text', '#e2e5e9');
+  window.document.documentElement.style.setProperty('--secondary-text', '#b0b3b8');
+  const facebookStyles = window.document.createElement('style');
+  facebookStyles.textContent = 'h2 { color: #1c1e21; } label > span { color: #606770; }';
+  window.document.head.append(facebookStyles);
+
+  await runUserscript(window);
+
+  const workspace = window.document.querySelector('[data-fbmw-workspace]');
+  assert.equal(window.getComputedStyle(workspace.querySelector('h2')).color, '#e2e5e9');
+  assert.equal(window.getComputedStyle(workspace.querySelector('label > span')).color, '#e2e5e9');
+});
+
 test('filters loaded listings with simple case-insensitive text', async () => {
   const { window } = facebookWindow(
     'https://www.facebook.com/marketplace/search/?query=used',
@@ -360,7 +546,7 @@ test('filters loaded listings with simple case-insensitive text', async () => {
   assertDimmed(card(window, '1202'), /text|match|filter/i);
 });
 
-test('supports AND, OR, and grouping in Boolean filters', async () => {
+test('supports plain-language and legacy AND/OR Boolean filters', async () => {
   const { window } = facebookWindow(
     'https://www.facebook.com/marketplace/search/?query=used',
     resultsPage([
@@ -372,13 +558,18 @@ test('supports AND, OR, and grouping in Boolean filters', async () => {
   await runUserscript(window);
 
   const workspace = window.document.querySelector('[data-fbmw-workspace]');
-  await setControl(window, controlNamed(workspace, /filter.*syntax|filter.*mode/i), 'boolean');
+  await setControl(window, controlNamed(workspace, /text matching|filter.*syntax|filter.*mode/i), 'boolean');
   await setControl(
     window,
     controlNamed(workspace, /filter.*listings/i),
-    '(canon + camera) | bicycle',
+    '(canon AND camera) OR bicycle',
   );
 
+  assertNotDimmed(card(window, '1301'));
+  assertNotDimmed(card(window, '1302'));
+  assertDimmed(card(window, '1303'), /text|match|filter/i);
+
+  await setControl(window, controlNamed(workspace, /filter.*listings/i), '(canon + camera) | bicycle');
   assertNotDimmed(card(window, '1301'));
   assertNotDimmed(card(window, '1302'));
   assertDimmed(card(window, '1303'), /text|match|filter/i);
@@ -397,7 +588,7 @@ test('supports regular expressions and fails open when the expression is invalid
 
   const workspace = window.document.querySelector('[data-fbmw-workspace]');
   const filterInput = controlNamed(workspace, /filter.*listings/i);
-  await setControl(window, controlNamed(workspace, /filter.*syntax|filter.*mode/i), 'regex');
+  await setControl(window, controlNamed(workspace, /text matching|filter.*syntax|filter.*mode/i), 'regex');
   await setControl(window, filterInput, 'Canon|Nikon');
 
   assertNotDimmed(card(window, '1401'));
@@ -471,14 +662,13 @@ test('filters loaded cards by saved buyer state without deleting other records',
   );
   await runUserscript(window);
 
-  listingAction(card(window, '1571'), /^Interested$/i).click();
-  await settle();
+  await setDisposition(window, card(window, '1571'), 'interested');
   const workspace = window.document.querySelector('[data-fbmw-workspace]');
   await setControl(window, controlNamed(workspace, /buyer state|listing state/i), 'interested');
 
   assertNotDimmed(card(window, '1571'));
   assertDimmed(card(window, '1572'), /buyer state|state filter/i);
-  assertPressed(listingAction(card(window, '1571'), /^Interested$/i));
+  assertDisposition(card(window, '1571'), 'interested');
 });
 
 test('distinguishes listings first seen this session from previously seen listings', async () => {
@@ -660,13 +850,13 @@ test('persists dispositions, favorite, hidden state, and notes by listing ID', a
   );
   await runUserscript(firstRun.window);
 
-  listingAction(card(firstRun.window, '1701'), /^Interested$/i).click();
-  listingAction(card(firstRun.window, '1702'), /^Later$/i).click();
-  listingAction(card(firstRun.window, '1703'), /^Pass$/i).click();
+  await setDisposition(firstRun.window, card(firstRun.window, '1701'), 'interested');
+  await setDisposition(firstRun.window, card(firstRun.window, '1702'), 'later');
+  await setDisposition(firstRun.window, card(firstRun.window, '1703'), 'pass');
   listingAction(card(firstRun.window, '1704'), /favorite/i).click();
   const note = controlNamed(card(firstRun.window, '1705'), /note/i);
   await setControl(firstRun.window, note, 'Ask whether the shade is included');
-  listingAction(card(firstRun.window, '1705'), /^Hide(?: listing)?$/i).click();
+  listingAction(card(firstRun.window, '1705'), /hide from results/i).click();
   await settle();
 
   const secondRun = facebookWindow(
@@ -676,18 +866,24 @@ test('persists dispositions, favorite, hidden state, and notes by listing ID', a
   );
   await runUserscript(secondRun.window);
 
-  assertPressed(listingAction(card(secondRun.window, '1701'), /^Interested$/i));
-  assertPressed(listingAction(card(secondRun.window, '1702'), /^Later$/i));
-  assertPressed(listingAction(card(secondRun.window, '1703'), /^Pass$/i));
+  assertDisposition(card(secondRun.window, '1701'), 'interested');
+  assertDisposition(card(secondRun.window, '1702'), 'later');
+  assertDisposition(card(secondRun.window, '1703'), 'pass');
   assertPressed(listingAction(card(secondRun.window, '1704'), /favorite/i));
   assert.equal(
     controlNamed(card(secondRun.window, '1705'), /note/i).value,
     'Ask whether the shade is included',
   );
+  const noteMenu = card(secondRun.window, '1705').querySelector('.fbmw-listing-menu');
+  assert.equal(noteMenu.getAttribute('data-has-note'), 'true');
+  assert.match(noteMenu.querySelector('summary').getAttribute('aria-label'), /private note saved/i);
   assert.ok(isHidden(card(secondRun.window, '1705')), 'hidden listings remain hidden after a reload');
 
-  buttonNamed(secondRun.window.document, /show hidden listings/i).click();
-  await settle();
+  await setCheckbox(
+    secondRun.window,
+    controlNamed(secondRun.window.document, /include listings hidden by me/i),
+    true,
+  );
   assert.equal(isHidden(card(secondRun.window, '1705')), false, 'the user can review hidden listings');
   assert.ok(listingAction(card(secondRun.window, '1705'), /unhide/i));
 });
@@ -881,7 +1077,7 @@ test('reset clears saved buyer decisions after confirmation', async () => {
   );
   await runUserscript(firstRun.window);
 
-  listingAction(card(firstRun.window, '2301'), /^Interested$/i).click();
+  await setDisposition(firstRun.window, card(firstRun.window, '2301'), 'interested');
   await setControl(firstRun.window, controlNamed(card(firstRun.window, '2301'), /note/i), 'Check shutter count');
   firstRun.window.confirm = () => true;
   buttonNamed(firstRun.window.document, /reset.*(?:buyer|workspace).*data/i).click();
@@ -894,7 +1090,7 @@ test('reset clears saved buyer decisions after confirmation', async () => {
   );
   await runUserscript(secondRun.window);
 
-  assertPressed(listingAction(card(secondRun.window, '2301'), /^Interested$/i), false);
+  assertDisposition(card(secondRun.window, '2301'), '');
   assert.equal(controlNamed(card(secondRun.window, '2301'), /note/i).value, '');
 });
 
@@ -909,7 +1105,7 @@ test('selectively clears listing decisions without resetting filters or saved vi
   await runUserscript(firstRun.window);
   const workspace = firstRun.window.document.querySelector('[data-fbmw-workspace]');
   await setControl(firstRun.window, controlNamed(workspace, /filter.*listings/i), 'Canon');
-  listingAction(card(firstRun.window, '2325'), /^Interested$/i).click();
+  await setDisposition(firstRun.window, card(firstRun.window, '2325'), 'interested');
   await setControl(firstRun.window, controlNamed(card(firstRun.window, '2325'), /note/i), 'Ask about lens');
   await setControl(firstRun.window, controlNamed(workspace, /saved view name|view name/i), 'Cameras');
   buttonNamed(workspace, /save current view/i).click();
@@ -925,7 +1121,7 @@ test('selectively clears listing decisions without resetting filters or saved vi
   );
   await runUserscript(secondRun.window);
   const secondWorkspace = secondRun.window.document.querySelector('[data-fbmw-workspace]');
-  assertPressed(listingAction(card(secondRun.window, '2325'), /^Interested$/i), false);
+  assertDisposition(card(secondRun.window, '2325'), '');
   assert.equal(controlNamed(card(secondRun.window, '2325'), /note/i).value, '');
   assert.equal(controlNamed(secondWorkspace, /filter.*listings/i).value, 'Canon');
   assert.ok(
@@ -949,7 +1145,7 @@ test('exports and imports settings, buyer records, navigation, and saved views',
 
   const sourceWorkspace = source.window.document.querySelector('[data-fbmw-workspace]');
   await setControl(source.window, controlNamed(sourceWorkspace, /filter.*listings/i), 'Canon');
-  listingAction(card(source.window, '2351'), /^Later$/i).click();
+  await setDisposition(source.window, card(source.window, '2351'), 'later');
   await setControl(
     source.window,
     controlNamed(sourceWorkspace, /saved view name|view name/i),
@@ -990,7 +1186,7 @@ test('exports and imports settings, buyer records, navigation, and saved views',
 
   const targetWorkspace = target.window.document.querySelector('[data-fbmw-workspace]');
   assert.equal(controlNamed(targetWorkspace, /filter.*listings/i).value, 'Canon');
-  assertPressed(listingAction(card(target.window, '2351'), /^Later$/i));
+  assertDisposition(card(target.window, '2351'), 'later');
   assert.ok(
     [...controlNamed(targetWorkspace, /^saved buyer views$/i).querySelectorAll('option')]
       .some((option) => option.textContent === 'Camera shortlist'),
@@ -1007,7 +1203,7 @@ test('a rejected import leaves the current buyer data intact', async () => {
   );
   await runUserscript(firstRun.window);
 
-  listingAction(card(firstRun.window, '2401'), /^Later$/i).click();
+  await setDisposition(firstRun.window, card(firstRun.window, '2401'), 'later');
   await setControl(firstRun.window, controlNamed(card(firstRun.window, '2401'), /note/i), 'Meet on Saturday');
   firstRun.window.prompt = () => '{not valid json';
   buttonNamed(firstRun.window.document, /import.*data/i).click();
@@ -1026,6 +1222,6 @@ test('a rejected import leaves the current buyer data intact', async () => {
   );
   await runUserscript(secondRun.window);
 
-  assertPressed(listingAction(card(secondRun.window, '2401'), /^Later$/i));
+  assertDisposition(card(secondRun.window, '2401'), 'later');
   assert.equal(controlNamed(card(secondRun.window, '2401'), /note/i).value, 'Meet on Saturday');
 });

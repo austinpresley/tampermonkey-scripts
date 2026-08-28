@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Facebook Marketplace Buyer Workspace
 // @namespace    https://github.com/austinpresley/tampermonkey-scripts
-// @version      1.0.0
+// @version      1.0.1
 // @description  Adds buyer filters, listing organization, navigation, and Saved access to Facebook Marketplace.
 // @match        https://www.facebook.com/marketplace/*
 // @include      https://www.facebook.com/saved/*dashboard_section=PRODUCTS*
@@ -198,13 +198,14 @@
         if (!card || card.closest('[data-fbmw-workspace], [data-fbmw-item-navigation]')) continue;
         if (!isElementVisible(card) || listings.has(id)) continue;
 
-        const sourceText = listingSourceText(card, anchor);
+        const sourceParts = listingSourceParts(card);
         listings.set(id, {
           id,
           card,
           anchor,
           canonicalUrl: canonicalItemUrl(id),
-          sourceText,
+          sourceText: sourceParts.join('\n'),
+          signals: listingSignals(sourceParts),
           normalizedLocation: normalizeText(listingLocationText(anchor)),
           price: listingPrice(anchor),
         });
@@ -228,15 +229,47 @@
       );
       if (explicitCard) return explicitCard;
 
+      const id = listingIdFromUrl(anchor.href);
+      if (!id) return null;
+
+      const anchorRectangle = anchor.getBoundingClientRect();
+      let card = null;
       let candidate = anchor.parentElement;
-      for (let depth = 0; candidate && depth < 5; depth += 1) {
-        const itemLinks = candidate.querySelectorAll(
-          'a[href*="/marketplace/item/"]:not([data-fbmw-open])',
-        );
-        if (itemLinks.length === 1 && candidate.querySelector('img')) return candidate;
+      for (let depth = 0; candidate && depth < 12; depth += 1) {
+        if (candidate.parentElement?.matches('main, [role="main"]')) break;
+        if (isListingCollection(candidate)) break;
+
+        const listingIds = listingIdsWithin(candidate);
+        if (listingIds.size !== 1 || !listingIds.has(id)) break;
+        if (candidate.querySelector('img') && isCardSized(candidate, anchorRectangle)) {
+          card = candidate;
+        }
         candidate = candidate.parentElement;
       }
-      return null;
+      return card;
+    }
+
+    function isListingCollection(element) {
+      if (element.matches('main, [role="main"], [role="feed"]')) return true;
+      const label = element.getAttribute('aria-label') || '';
+      return /marketplace (?:results|listings)|search results/i.test(label);
+    }
+
+    function listingIdsWithin(element) {
+      const ids = new Set();
+      for (const link of element.querySelectorAll(
+        'a[href*="/marketplace/item/"]:not([data-fbmw-open])',
+      )) {
+        const id = listingIdFromUrl(link.href);
+        if (id) ids.add(id);
+      }
+      return ids;
+    }
+
+    function isCardSized(element, anchorRectangle) {
+      const rectangle = element.getBoundingClientRect();
+      if (!rectangle.width || !anchorRectangle.width) return true;
+      return rectangle.width <= Math.max(anchorRectangle.width * 1.4, anchorRectangle.width + 64);
     }
 
     function isElementVisible(element) {
@@ -261,14 +294,43 @@
       card.setAttribute('data-fbmw-original-display', card.style.display);
     }
 
-    function listingSourceText(card, anchor) {
-      const parts = [
-        card.getAttribute('aria-label') || '',
-        anchor.getAttribute('aria-label') || '',
-        anchor.textContent || '',
-        ...[...anchor.querySelectorAll('img[alt]')].map((image) => image.alt),
-      ];
-      return parts.filter(Boolean).join('\n');
+    function listingSourceParts(card) {
+      const parts = [];
+      const add = (value) => {
+        const text = value?.trim();
+        if (text) parts.push(text);
+      };
+
+      for (const element of [
+        card,
+        ...card.querySelectorAll('[aria-label], img[alt], span, [dir="auto"]'),
+      ]) {
+        if (element.closest('[data-fbmw-owned]')) continue;
+        add(element.getAttribute('aria-label'));
+        add(element.getAttribute('alt'));
+        if (element.matches('span, [dir="auto"]')) add(element.textContent);
+      }
+
+      const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const parent = walker.currentNode.parentElement;
+        if (!parent?.closest('[data-fbmw-owned]')) add(walker.currentNode.nodeValue);
+      }
+
+      return [...new Set(parts)];
+    }
+
+    function listingSignals(sourceParts) {
+      const facts = new Set(sourceParts.map(normalizeText));
+      return {
+        sponsored: facts.has('sponsored') || facts.has('ad'),
+        shipping: [
+          'ship to you',
+          'ships to you',
+          'shipping available',
+          'delivery available',
+        ].some((fact) => facts.has(fact)),
+      };
     }
 
     function listingLocationText(anchor) {
@@ -335,16 +397,10 @@
         if (!matchesBuyerState(record, data.settings.viewState, listing.id)) {
           reasons.push('Does not match buyer state');
         }
-        if (
-          data.settings.dimSponsored &&
-          /(?:\bsponsored\b|(?:^|[\s,])ad(?:$|[\s,]))/i.test(listing.sourceText)
-        ) {
+        if (data.settings.dimSponsored && listing.signals.sponsored) {
           reasons.push('Sponsored');
         }
-        if (
-          data.settings.dimShipping &&
-          /\b(?:ships? to you|shipping available|delivery available)\b/i.test(listing.sourceText)
-        ) {
+        if (data.settings.dimShipping && listing.signals.shipping) {
           reasons.push('Ships to you');
         }
 
@@ -361,7 +417,7 @@
         }
 
         const concealed = record.hidden && !data.settings.showHidden;
-        if (record.hidden && data.settings.showHidden) reasons.push('Marked hidden');
+        if (record.hidden && data.settings.showHidden) reasons.push('Hidden by you');
 
         ensureListingInterface(listing, record);
         applyCardPresentation(listing.card, concealed, reasons);
@@ -429,19 +485,25 @@
         actions.className = 'fbmw-listing-actions';
         actions.setAttribute('aria-label', 'Buyer listing controls');
         actions.innerHTML = `
-          <div class="fbmw-action-row" role="group" aria-label="Listing decision">
-            ${toggleButton('Interested', 'disposition', 'interested')}
-            ${toggleButton('Later', 'disposition', 'later')}
-            ${toggleButton('Pass', 'disposition', 'pass')}
+          <div class="fbmw-listing-toolbar" data-fbmw-listing-toolbar>
+            <select data-fbmw-disposition aria-label="Buyer status">
+              <option value="">Unreviewed</option>
+              <option value="interested">Interested</option>
+              <option value="later">Later</option>
+              <option value="pass">Pass</option>
+            </select>
+            <button type="button" class="fbmw-favorite" data-listing-action="favorite" aria-label="Favorite listing" aria-pressed="false">☆</button>
+            <details class="fbmw-listing-menu">
+              <summary aria-label="More buyer actions">•••</summary>
+              <div class="fbmw-listing-menu-panel">
+                <label class="fbmw-note-label">
+                  <span>Private note</span>
+                  <input data-fbmw-note aria-label="Private note for listing" maxlength="${NOTE_LIMIT}" placeholder="Add a private note" type="text">
+                </label>
+                <button type="button" data-listing-action="hidden" aria-pressed="false">Hide from results</button>
+              </div>
+            </details>
           </div>
-          <div class="fbmw-action-row" role="group" aria-label="Listing flags">
-            ${toggleButton('Favorite', 'favorite')}
-            ${toggleButton('Hide listing', 'hidden')}
-          </div>
-          <label class="fbmw-note-label">
-            <span>Note</span>
-            <input data-fbmw-note aria-label="Note for listing" maxlength="${NOTE_LIMIT}" placeholder="Private note" type="text">
-          </label>
           <p class="fbmw-reason" data-fbmw-reason hidden></p>
         `;
         listing.card.append(actions);
@@ -450,19 +512,13 @@
       syncListingInterface(actions, record);
     }
 
-    function toggleButton(label, action, value = '') {
-      const valueAttribute = value ? ` data-value="${value}"` : '';
-      return `<button type="button" data-listing-action="${action}"${valueAttribute} aria-pressed="false">${label}</button>`;
-    }
-
     function syncListingInterface(actions, record) {
-      for (const button of actions.querySelectorAll('[data-listing-action="disposition"]')) {
-        button.setAttribute('aria-pressed', String(record.disposition === button.dataset.value));
-      }
+      const disposition = actions.querySelector('[data-fbmw-disposition]');
+      if (document.activeElement !== disposition) disposition.value = record.disposition || '';
 
       const favorite = actions.querySelector('[data-listing-action="favorite"]');
       favorite.setAttribute('aria-pressed', String(record.favorite));
-      setText(favorite, record.favorite ? 'Remove favorite' : 'Favorite');
+      setText(favorite, record.favorite ? '★' : '☆');
       favorite.setAttribute(
         'aria-label',
         record.favorite ? 'Remove listing from favorites' : 'Favorite listing',
@@ -470,14 +526,16 @@
 
       const hidden = actions.querySelector('[data-listing-action="hidden"]');
       hidden.setAttribute('aria-pressed', String(record.hidden));
-      setText(hidden, record.hidden ? 'Unhide listing' : 'Hide listing');
-      hidden.setAttribute('aria-label', record.hidden ? 'Unhide listing' : 'Hide listing');
+      setText(hidden, record.hidden ? 'Unhide' : 'Hide from results');
+      hidden.setAttribute('aria-label', record.hidden ? 'Unhide listing' : 'Hide from results');
 
       const note = actions.querySelector('[data-fbmw-note]');
       if (document.activeElement !== note && note.value !== record.note) note.value = record.note;
-      actions.setAttribute(
-        'data-fbmw-active',
-        String(Boolean(record.disposition || record.favorite || record.hidden || record.note)),
+      const menu = actions.querySelector('.fbmw-listing-menu');
+      menu.setAttribute('data-has-note', String(Boolean(record.note)));
+      menu.querySelector('summary').setAttribute(
+        'aria-label',
+        record.note ? 'More buyer actions, private note saved' : 'More buyer actions',
       );
     }
 
@@ -641,18 +699,23 @@
         </header>
         <div class="fbmw-panel-body" data-fbmw-panel-body>
           <label>
-            <span>Filter loaded listings</span>
-            <input type="search" data-setting="query" aria-label="Filter listings" autocomplete="off" placeholder="Title, location, or details">
+            <span>Search these loaded results</span>
+            <input type="search" data-setting="query" aria-label="Filter loaded listings" aria-describedby="fbmw-text-matching-help" autocomplete="off" placeholder="Try a title, location, or detail">
           </label>
-          <label>
-            <span>Filter syntax</span>
-            <select data-setting="filterMode" aria-label="Filter syntax">
-              <option value="simple">Simple text</option>
-              <option value="boolean">Boolean</option>
-              <option value="regex">Regular expression</option>
-            </select>
-          </label>
-          <p class="fbmw-help">Boolean uses + for AND, | for OR, and parentheses for groups.</p>
+          <details class="fbmw-text-matching">
+            <summary data-fbmw-text-matching-summary>Text matching: Contains this text</summary>
+            <div class="fbmw-detail-body">
+              <label>
+                <span>Text matching</span>
+                <select data-setting="filterMode" aria-label="Text matching">
+                  <option value="simple">Contains this text</option>
+                  <option value="boolean">Use AND / OR</option>
+                  <option value="regex">Regular expression (advanced)</option>
+                </select>
+              </label>
+              <p class="fbmw-help" id="fbmw-text-matching-help" data-fbmw-text-matching-help></p>
+            </div>
+          </details>
           <p class="fbmw-alert" data-fbmw-filter-error role="alert" hidden></p>
           <p class="fbmw-count" data-fbmw-count aria-live="polite"></p>
           <p class="fbmw-help" data-fbmw-price-summary></p>
@@ -698,7 +761,8 @@
             </div>
             <label class="fbmw-check"><input type="checkbox" data-setting="dimSponsored"> Dim Sponsored listings</label>
             <label class="fbmw-check"><input type="checkbox" data-setting="dimShipping"> Dim Ships to you listings</label>
-            <button type="button" data-workspace-action="show-hidden" aria-pressed="false">Show hidden listings</button>
+            <label class="fbmw-check"><input type="checkbox" data-setting="showHidden"> Include listings hidden by me</label>
+            <p class="fbmw-help">Hide from results removes a card until this is turned on.</p>
             </div>
           </details>
           <details>
@@ -805,12 +869,24 @@
         `${data.settings.collapsed ? 'Expand' : 'Collapse'} Buyer workspace`,
       );
 
-      const showHidden = panel.querySelector('[data-workspace-action="show-hidden"]');
-      showHidden.setAttribute('aria-pressed', String(data.settings.showHidden));
+      const matchingHelp = panel.querySelector('[data-fbmw-text-matching-help]');
+      const matchingLabels = {
+        simple: 'Contains this text',
+        boolean: 'Use AND / OR',
+        regex: 'Regular expression',
+      };
       setText(
-        showHidden,
-        data.settings.showHidden ? 'Stop showing hidden listings' : 'Show hidden listings',
+        panel.querySelector('[data-fbmw-text-matching-summary]'),
+        `Text matching: ${matchingLabels[data.settings.filterMode]}`,
       );
+      const matchingHelpText = {
+        simple: 'Matches this text together, in the same order.',
+        boolean: 'Use AND to require both and OR to allow either. Quotes keep a phrase together.',
+        regex: 'Advanced: enter a case-insensitive regular expression.',
+      }[data.settings.filterMode];
+      if (matchingHelp.textContent !== matchingHelpText) {
+        matchingHelp.textContent = matchingHelpText;
+      }
 
       const count = panel.querySelector('[data-fbmw-count]');
       const countText = `${counts.visible} visible · ${counts.filtered} filtered · ${counts.total} loaded`;
@@ -913,16 +989,23 @@
         return;
       }
 
+      if (control.matches('[data-fbmw-disposition]')) {
+        const id = control.closest('[data-fbmw-listing-actions]')?.dataset.listingId;
+        if (!id) return;
+        const record = listingRecord(id);
+        record.disposition = control.value || null;
+        pruneListingRecord(id);
+        persist();
+        queueRender();
+        return;
+      }
+
       if (control.matches('[data-fbmw-note]')) {
         const actions = control.closest('[data-fbmw-listing-actions]');
         const id = actions?.dataset.listingId;
         if (!id) return;
         const record = listingRecord(id);
         record.note = control.value.slice(0, NOTE_LIMIT);
-        actions.setAttribute(
-          'data-fbmw-active',
-          String(Boolean(record.disposition || record.favorite || record.hidden || record.note)),
-        );
         pruneListingRecord(id);
         persist();
       }
@@ -992,10 +1075,6 @@
     function runWorkspaceAction(action) {
       if (action === 'collapse') {
         data.settings.collapsed = !data.settings.collapsed;
-        persist();
-        queueRender();
-      } else if (action === 'show-hidden') {
-        data.settings.showHidden = !data.settings.showHidden;
         persist();
         queueRender();
       } else if (action === 'apply-url') {
@@ -1275,13 +1354,19 @@
         [data-fbmw-workspace], [data-fbmw-item-navigation], [data-fbmw-listing-actions],
         [data-fbmw-launcher], [data-fbmw-open], [data-fbmw-saved-link="fallback"],
         [data-fbmw-back-link] {
+          --fbmw-primary-text: var(--primary-text, #050505);
+          --fbmw-secondary-text: var(--secondary-text, #65676b);
+          --fbmw-surface: var(--card-background, #fff);
+          --fbmw-control: var(--comment-background, #f0f2f5);
+          --fbmw-button: var(--secondary-button-background, #e4e6eb);
           box-sizing: border-box;
-          color: var(--primary-text, #050505);
+          color: var(--fbmw-primary-text);
+          color-scheme: light dark;
           font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
           font-size: 14px;
         }
         .fbmw-workspace {
-          background: var(--card-background, #fff);
+          background: var(--fbmw-surface);
           border: 1px solid var(--divider, #ced0d4);
           border-radius: 12px;
           display: block;
@@ -1307,6 +1392,13 @@
           justify-content: space-between;
           padding: 12px;
         }
+        .fbmw-header h2,
+        .fbmw-panel-body label,
+        .fbmw-panel-body label > span,
+        .fbmw-note-label,
+        .fbmw-note-label > span {
+          color: var(--fbmw-primary-text);
+        }
         .fbmw-header h2 { font-size: 17px; margin: 0; }
         .fbmw-panel-body { display: grid; gap: 10px; padding: 0 12px 12px; }
         .fbmw-panel-body[hidden] { display: none; }
@@ -1314,10 +1406,10 @@
         .fbmw-panel-body input[type="search"], .fbmw-panel-body input[type="text"],
         .fbmw-panel-body input[type="number"],
         .fbmw-panel-body select, .fbmw-panel-body textarea {
-          background: var(--comment-background, #f0f2f5);
+          background: var(--fbmw-control);
           border: 1px solid transparent;
           border-radius: 8px;
-          color: var(--primary-text, #050505);
+          color: var(--fbmw-primary-text);
           font: inherit;
           min-width: 0;
           padding: 8px 10px;
@@ -1325,17 +1417,18 @@
           width: 100%;
         }
         .fbmw-panel-body :is(input, select, textarea, button, summary, a):focus-visible,
-        .fbmw-listing-actions :is(input, button):focus-visible,
+        .fbmw-listing-actions :is(input, select, button, summary):focus-visible,
         .fbmw-open:focus-visible {
           outline: 2px solid var(--accent, #0866ff);
           outline-offset: 2px;
         }
         .fbmw-panel-body button, .fbmw-header button, .fbmw-listing-actions button,
+        .fbmw-listing-menu summary,
         .fbmw-item-navigation a, .fbmw-item-navigation .fbmw-disabled {
-          background: var(--secondary-button-background, #e4e6eb);
+          background: var(--fbmw-button);
           border: 0;
           border-radius: 7px;
-          color: var(--primary-text, #050505);
+          color: var(--fbmw-primary-text);
           cursor: pointer;
           font: inherit;
           padding: 7px 9px;
@@ -1360,7 +1453,7 @@
           color: #1c1e21;
         }
         .fbmw-help, .fbmw-count, .fbmw-alert { margin: 0; }
-        .fbmw-help, .fbmw-count { color: var(--secondary-text, #65676b); font-size: 12px; }
+        .fbmw-help, .fbmw-count { color: var(--fbmw-secondary-text); font-size: 12px; }
         .fbmw-alert { color: var(--negative, #b42318); font-size: 12px; }
         .fbmw-two-columns { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; }
         .fbmw-check { align-items: center; display: flex; gap: 7px; }
@@ -1370,13 +1463,18 @@
           padding: 9px 10px;
         }
         .fbmw-panel-body summary { cursor: pointer; font-weight: 600; }
+        .fbmw-panel-body ::placeholder,
+        .fbmw-listing-actions ::placeholder {
+          color: var(--fbmw-secondary-text);
+          opacity: 1;
+        }
         .fbmw-detail-body { display: grid; gap: 8px; padding-top: 9px; }
         .fbmw-action-row, .fbmw-data-actions { display: flex; flex-wrap: wrap; gap: 6px; }
         .fbmw-data-actions { margin-top: 8px; }
         .fbmw-shortcut {
           align-items: center;
           border-radius: 8px;
-          color: var(--primary-text, #050505);
+          color: var(--fbmw-primary-text);
           display: flex;
           font-weight: 600;
           min-height: 52px;
@@ -1400,13 +1498,13 @@
         }
         [data-fbmw-card] { position: relative; }
         [data-fbmw-card][data-fbmw-dimmed="true"] > a:not([data-fbmw-open]),
-        [data-fbmw-card][data-fbmw-dimmed="true"] > :not([data-fbmw-owned]) { opacity: .42; }
+        [data-fbmw-card][data-fbmw-dimmed="true"] > :not([data-fbmw-owned]) { opacity: .58; }
         [data-fbmw-card][data-fbmw-dimmed="true"]:is(:hover, :focus-within) > a:not([data-fbmw-open]),
         [data-fbmw-card][data-fbmw-dimmed="true"]:is(:hover, :focus-within) > :not([data-fbmw-owned]) {
           opacity: .72;
         }
         .fbmw-open {
-          background: var(--secondary-button-background, #e4e6eb);
+          background: var(--fbmw-button);
           border-radius: 7px;
           padding: 5px 8px;
           position: absolute;
@@ -1419,42 +1517,79 @@
           display: grid;
           gap: 5px;
           margin-top: 4px;
+          min-height: 36px;
+          position: relative;
         }
-        .fbmw-listing-actions > :not(.fbmw-reason) {
-          max-height: 0;
-          opacity: 0;
-          overflow: hidden;
-          pointer-events: none;
+        .fbmw-listing-toolbar {
+          align-items: center;
+          display: grid;
+          gap: 6px;
+          grid-template-columns: minmax(0, 1fr) 36px 36px;
+          min-height: 36px;
         }
-        [data-fbmw-card]:is(:hover, :focus-within) .fbmw-listing-actions > :not(.fbmw-reason),
-        .fbmw-listing-actions[data-fbmw-active="true"] > :not(.fbmw-reason) {
-          max-height: 80px;
-          opacity: 1;
-          overflow: visible;
-          pointer-events: auto;
+        .fbmw-listing-toolbar > select {
+          background: var(--fbmw-control);
+          border: 1px solid var(--divider, #ced0d4);
+          border-radius: 7px;
+          color: var(--fbmw-primary-text);
+          font: inherit;
+          height: 36px;
+          min-width: 0;
+          padding: 6px 8px;
+          width: 100%;
         }
+        .fbmw-favorite,
+        .fbmw-listing-menu > summary {
+          align-items: center;
+          display: flex;
+          height: 36px;
+          justify-content: center;
+          list-style: none;
+          padding: 0;
+          width: 36px;
+        }
+        .fbmw-listing-menu > summary::-webkit-details-marker { display: none; }
+        .fbmw-listing-menu { position: relative; }
+        .fbmw-listing-menu[data-has-note="true"] > summary {
+          box-shadow: inset 0 0 0 2px var(--accent, #0866ff);
+        }
+        .fbmw-listing-menu-panel {
+          background: var(--fbmw-surface);
+          border: 1px solid var(--divider, #ced0d4);
+          border-radius: 10px;
+          bottom: calc(100% + 6px);
+          box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
+          display: grid;
+          gap: 8px;
+          padding: 10px;
+          position: absolute;
+          right: 0;
+          width: min(240px, calc(100vw - 32px));
+          z-index: 4;
+        }
+        .fbmw-listing-menu:not([open]) > .fbmw-listing-menu-panel { display: none; }
         .fbmw-note-label { display: grid; gap: 4px; }
         .fbmw-note-label input {
-          background: var(--comment-background, #f0f2f5);
-          border: 1px solid transparent;
+          background: var(--fbmw-control);
+          border: 1px solid var(--divider, #ced0d4);
           border-radius: 7px;
-          color: var(--primary-text, #050505);
+          color: var(--fbmw-primary-text);
           font: inherit;
           min-width: 0;
           padding: 7px 8px;
           width: 100%;
         }
         .fbmw-reason {
-          background: var(--secondary-button-background, #e4e6eb);
+          background: var(--fbmw-button);
           border-radius: 7px;
-          color: var(--secondary-text, #65676b);
+          color: var(--fbmw-secondary-text);
           font-size: 12px;
           margin: 0;
           padding: 5px 7px;
         }
         .fbmw-item-navigation {
           align-items: center;
-          background: var(--card-background, #fff);
+          background: var(--fbmw-surface);
           border: 1px solid var(--divider, #ced0d4);
           border-radius: 12px;
           display: flex;
@@ -1464,8 +1599,19 @@
           padding: 10px;
         }
         .fbmw-item-navigation .fbmw-disabled { cursor: default; opacity: .55; }
-        .fbmw-position { color: var(--secondary-text, #65676b); }
+        .fbmw-position { color: var(--fbmw-secondary-text); }
         .fbmw-back { margin-left: auto; }
+        @media (prefers-color-scheme: dark) {
+          [data-fbmw-workspace], [data-fbmw-item-navigation], [data-fbmw-listing-actions],
+          [data-fbmw-launcher], [data-fbmw-open], [data-fbmw-saved-link="fallback"],
+          [data-fbmw-back-link] {
+            --fbmw-primary-text: var(--primary-text, #e4e6eb);
+            --fbmw-secondary-text: var(--secondary-text, #b0b3b8);
+            --fbmw-surface: var(--card-background, #242526);
+            --fbmw-control: var(--comment-background, #3a3b3c);
+            --fbmw-button: var(--secondary-button-background, #3a3b3c);
+          }
+        }
         @media (max-width: 700px) {
           .fbmw-two-columns { grid-template-columns: 1fr; }
           .fbmw-workspace:not([data-fbmw-floating]) { margin-inline: 4px; width: calc(100% - 8px); }
@@ -1788,7 +1934,7 @@
         matches: (text) => evaluateBooleanExpression(expression, normalizeText(text)),
       };
     } catch {
-      return { error: 'Invalid Boolean filter.', matches: null };
+      return { error: 'Invalid AND / OR filter.', matches: null };
     }
   }
 
@@ -1804,7 +1950,10 @@
       tokenPattern.lastIndex = position;
       const match = tokenPattern.exec(source);
       if (!match) throw new SyntaxError('Unexpected token');
-      tokens.push(match[1]);
+      const token = match[1];
+      if (!token.startsWith('"') && /^and$/i.test(token)) tokens.push('+');
+      else if (!token.startsWith('"') && /^or$/i.test(token)) tokens.push('|');
+      else tokens.push(token);
       position = tokenPattern.lastIndex;
     }
 

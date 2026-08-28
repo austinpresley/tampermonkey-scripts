@@ -22,22 +22,22 @@ Supported routes include:
 
 ### Result filters
 
-- Search loaded cards by plain text, a Boolean expression, or a regular expression.
+- Search loaded cards by plain text. Optional text-matching settings support plain-language AND / OR rules and advanced regular expressions.
 - Filter against listing text without changing Facebook's search query.
 - Exclude unwanted words or phrases with a separate comma- or line-separated list.
 - Set local minimum and maximum prices for cards whose displayed dollar price can be read. Cards without a recognized price fail open and remain reviewable.
 - Keep listings from named locations with an allow list, and reject unwanted locations with a block list. A block match takes priority over an allow match.
 - Review all, new-this-session, previously seen, unreviewed, Interested, Later, Pass, or Favorite listings without deleting other saved buyer states.
 - Dim Sponsored and Ships to you results by default, with a reason attached to each affected card.
-- Dim text and location nonmatches instead of removing them. Only the explicit Hide listing action conceals a card.
-- Show or conceal listings marked Hidden without deleting their saved state.
+- Dim text and location nonmatches instead of removing them. Only the explicit Hide from results action conceals a card.
+- Include listings hidden by me makes concealed cards reviewable again without deleting their saved state.
 - See the current visible and filtered result counts plus the minimum, maximum, and median of recognized loaded prices.
 
-Boolean filters support `+` for AND, `|` for OR, parentheses for groups, and quotation marks for a phrase. Adjacent terms also act as AND. Regular expressions are case-insensitive and limited to 160 characters. An invalid or unsafe expression leaves the results visible and shows an error instead of dimming the grid.
+AND / OR matching accepts the words `AND` and `OR`, parentheses for groups, and quotation marks for a phrase. Existing saved views that use `+` for AND or `|` for OR still work. Adjacent terms also act as AND. Regular expressions are case-insensitive and limited to 160 characters. An invalid or unsafe expression leaves the results visible and shows an error instead of dimming the grid.
 
 ### Listing organization
 
-Each recognized listing can be marked Interested, Later, or Pass. Favorite and Hidden are separate switches, so either can be combined with the main state. The compact controls appear when a card is hovered or focused and remain visible once that listing has saved buyer data. The script saves these choices by Facebook listing ID and reapplies them when the same card returns. A note of up to 500 characters can be attached to a listing. Show hidden makes a hidden card available for review again.
+Each recognized listing has an always-visible Buyer status menu for Unreviewed, Interested, Later, or Pass, plus a Favorite button. More buyer actions opens an overlay for a private note of up to 500 characters and Hide from results. The overlay does not resize the card. The script saves these choices by Facebook listing ID and reapplies them when the same card returns. Turn on Include listings hidden by me in More buyer filters to review or unhide a concealed card.
 
 ### Result navigation
 
@@ -91,11 +91,14 @@ Facebook still receives its normal page requests. Applying URL controls or openi
 
 ## Manual test checklist
 
-### Validation performed for 1.0.0
+### Validation performed for 1.0.1
 
-- `npm test` passes the repository validator, version check, syntax check, and 28 buyer-workspace behavior tests.
+- `npm test` passes the repository validator, version check, syntax check, and 33 buyer-workspace behavior tests.
 - A signed-in Facebook desktop session at 1280 by 800 was checked on Marketplace home, a Marketplace search, and Saved products in dark mode.
-- The live Marketplace checks covered current navigation-region discovery, compact and expanded panel dimensions, loaded-card recognition, duplicate-free controls, price parsing and filtering, saved-view persistence through userscript storage mocks, delivery and condition URL synchronization, and zero uncaught page errors.
+- The focused 1.0.1 live check recognized 20 current div-based cards and dimmed all eight loaded Ships to you cards. Turning the option off restored them and turning it back on dimmed them again.
+- The live card toolbar stayed at the same 439.07-pixel card height after changing Buyer status, opening More buyer actions, and toggling Favorite. Hide, Include listings hidden by me, and Unhide were also exercised end to end.
+- Dark-mode headings, field labels, inputs, toolbar controls, notes, reasons, and help text resolved to Facebook's current light text colors on its dark surfaces.
+- Earlier live Marketplace checks covered navigation-region discovery, compact and expanded panel dimensions, duplicate-free controls, price parsing and filtering, saved-view persistence through userscript storage mocks, delivery and condition URL synchronization, and zero uncaught page errors.
 - The live Saved-products check confirmed one 360 by 52 Back to Marketplace row and no leaked workspace or card controls.
 - The shared Facebook page was reloaded after browser checks, so injected test UI and in-memory test data were removed.
 
@@ -134,22 +137,22 @@ The remaining checklist is intentionally retained for cross-device userscript-ma
 ### Text and listing filters
 
 - [ ] Enter mixed-case plain text and confirm matching is case-insensitive.
-- [ ] Test Boolean AND with `+`, OR with `|`, and nested groups with parentheses.
-- [ ] Test adjacent Boolean terms and a quoted phrase.
-- [ ] Test an invalid Boolean expression and confirm the grid remains visible with a useful error.
+- [ ] Test plain-language AND / OR matching and nested groups with parentheses. Confirm legacy `+` and `|` saved filters still work.
+- [ ] Test adjacent AND / OR terms and a quoted phrase.
+- [ ] Test an invalid AND / OR expression and confirm the grid remains visible with a useful error.
 - [ ] Test a valid regular expression and confirm expected cards match.
 - [ ] Test an invalid expression, an expression over 160 characters, and a nested-repetition expression. Confirm validation prevents a broken or frozen grid.
 - [ ] Toggle Sponsored and Ships to you filtering one at a time. Confirm each dims the right cards with the correct reason.
 - [ ] Add and remove allowed and blocked location terms using both new lines and commas. Confirm matching is case-insensitive, a block match takes priority, and an empty entry never matches.
 - [ ] Add excluded terms and minimum or maximum prices. Confirm unknown prices remain visible and an inverted price range fails open with an error.
 - [ ] Switch among All, New this session, Seen before, Unreviewed, Interested, Later, Pass, and Favorites and confirm nonmatching states are dimmed without clearing data.
-- [ ] Mark a listing Hidden, toggle Show hidden, and confirm the card can always be recovered.
+- [ ] Use Hide from results, turn on Include listings hidden by me, and confirm the card can always be recovered with Unhide.
 - [ ] Combine text, location, delivery, ad, and hidden-state filters. Confirm reasons and visible or filtered counts remain correct.
 - [ ] Clear the query and location filters and confirm all eligible cards return without losing saved states or notes.
 
 ### Listing states and notes
 
-- [ ] Mark separate listings Interested, Later, and Pass. Confirm each visual state is distinct and readable in both themes.
+- [ ] Set separate listings to Interested, Later, and Pass. Confirm each Buyer status is distinct and readable in both themes.
 - [ ] Change a listing from one main state to another and confirm the old state clears.
 - [ ] Toggle Favorite and Hidden independently, including on a listing that already has a main state.
 - [ ] Hide a listing, reveal it, and restore it without clearing unrelated records.
@@ -157,6 +160,7 @@ The remaining checklist is intentionally retained for cross-device userscript-ma
 - [ ] Reload and revisit the same listing through a different Marketplace route. Confirm its state and note follow its listing ID.
 - [ ] Confirm listing controls do not activate the underlying card link when clicked.
 - [ ] Confirm keyboard focus can reach every state and note control and that screen-reader names describe their actions.
+- [ ] Change Buyer status, toggle Favorite, and open More buyer actions. Confirm the card does not resize or move.
 
 ### Navigation and links
 
