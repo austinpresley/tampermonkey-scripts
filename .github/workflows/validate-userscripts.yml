@@ -8,6 +8,7 @@ on:
       - 'templates/**'
       - 'tools/**'
       - 'package.json'
+      - 'package-lock.json'
       - 'userscripts.json'
   push:
     branches:
@@ -18,6 +19,7 @@ on:
       - 'templates/**'
       - 'tools/**'
       - 'package.json'
+      - 'package-lock.json'
       - 'userscripts.json'
 
 permissions:
@@ -36,6 +38,9 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 24
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Validate repository
         run: npm test
