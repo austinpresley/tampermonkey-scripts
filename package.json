@@ -23,6 +23,7 @@
     "validate": "node tools/validate-userscripts.mjs",
     "check:versions": "node tools/check-version-bumps.mjs",
     "raw-urls": "node tools/list-raw-urls.mjs",
+    "test-url": "node tools/print-test-url.mjs",
     "test": "npm run validate && npm run check:versions"
   }
 }
