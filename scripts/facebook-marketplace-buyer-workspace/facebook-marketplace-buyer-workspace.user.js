@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Facebook Marketplace Buyer Workspace
 // @namespace    https://github.com/austinpresley/tampermonkey-scripts
-// @version      1.0.1
+// @version      1.0.2
 // @description  Adds buyer filters, listing organization, navigation, and Saved access to Facebook Marketplace.
 // @match        https://www.facebook.com/marketplace/*
 // @include      https://www.facebook.com/saved/*dashboard_section=PRODUCTS*
@@ -23,14 +23,16 @@
   const NOTE_LIMIT = 500;
   const LISTING_RECORD_LIMIT = 2000;
   const SEEN_LISTING_LIMIT = 5000;
+  const NAVIGATION_ITEM_LIMIT = 1000;
   const SAVED_VIEW_LIMIT = 12;
   const SAVED_VIEW_NAME_LIMIT = 60;
-  const MANAGED_URL_PARAMETERS = [
-    'sortBy',
-    'daysSinceListed',
-    'deliveryMethod',
-    'itemCondition',
-  ];
+  const RENDER_DEBOUNCE_MS = 40;
+  const URL_CONTROLS = Object.freeze({
+    sort: 'sortBy',
+    recency: 'daysSinceListed',
+    delivery: 'deliveryMethod',
+    condition: 'itemCondition',
+  });
   const SAVED_VIEW_SETTING_KEYS = [
     'query',
     'filterMode',
@@ -67,12 +69,13 @@
 
   function createBuyerWorkspace() {
     let data = loadData();
-    let renderQueued = false;
+    let renderTimer = null;
     let rendering = false;
     let filterError = '';
     let currentItemTargets = null;
     let selectedViewId = '';
     let seenBeforeSession = new Set(Object.keys(data.seen));
+    let undoSnapshot = null;
 
     const observer = new MutationObserver((records) => {
       const pageChanged = records.some((record) => {
@@ -97,10 +100,9 @@
     }
 
     function queueRender() {
-      if (renderQueued) return;
-      renderQueued = true;
-      queueMicrotask(() => {
-        renderQueued = false;
+      if (renderTimer !== null) window.clearTimeout(renderTimer);
+      renderTimer = window.setTimeout(() => {
+        renderTimer = null;
         if (rendering) return;
         rendering = true;
         try {
@@ -108,7 +110,7 @@
         } finally {
           rendering = false;
         }
-      });
+      }, RENDER_DEBOUNCE_MS);
     }
 
     function render() {
@@ -586,9 +588,19 @@
 
     function ensureSavedLink(sidebar) {
       if (!sidebar) return;
-      const nativeLink = sidebar.querySelector(
-        'a[href^="/marketplace/you/saved"], a[href*="facebook.com/marketplace/you/saved"]',
-      );
+      const nativeLink = [...sidebar.querySelectorAll('a[href]')].find((link) => {
+        try {
+          const url = new URL(link.href, window.location.origin);
+          return (
+            url.origin === window.location.origin &&
+            (url.pathname.startsWith('/marketplace/you/saved') ||
+              (url.pathname.startsWith('/saved/') &&
+                url.searchParams.get('dashboard_section') === 'PRODUCTS'))
+          );
+        } catch {
+          return false;
+        }
+      });
       if (nativeLink) {
         nativeLink.setAttribute('data-fbmw-saved-link', 'native');
         sidebar.querySelectorAll('[data-fbmw-saved-link="fallback"]').forEach((link) => link.remove());
@@ -839,6 +851,7 @@
               <button type="button" data-workspace-action="clear-listings">Clear listing decisions</button>
               <button type="button" data-workspace-action="clear-seen">Forget seen history</button>
               <button type="button" data-workspace-action="reset">Reset buyer workspace data</button>
+              <button type="button" data-workspace-action="undo" disabled>Undo last data change</button>
             </div>
           </details>
           <p class="fbmw-alert" data-fbmw-data-message role="alert" hidden></p>
@@ -898,20 +911,20 @@
       priceSummary.hidden = !summaryText;
       syncSavedViews(panel);
 
+      const undo = panel.querySelector('[data-workspace-action="undo"]');
+      undo.disabled = !undoSnapshot;
+      setText(undo, undoSnapshot ? `Undo ${undoSnapshot.label}` : 'Undo last data change');
+
       const error = panel.querySelector('[data-fbmw-filter-error]');
       if (error.textContent !== filterError) error.textContent = filterError;
       error.hidden = !filterError;
 
       const currentUrl = new URL(window.location.href);
-      const sort = panel.querySelector('[data-url-control="sort"]');
-      const recency = panel.querySelector('[data-url-control="recency"]');
-      const delivery = panel.querySelector('[data-url-control="delivery"]');
-      const condition = panel.querySelector('[data-url-control="condition"]');
       if (panel.dataset.fbmwControlsUrl !== currentUrl.href) {
-        sort.value = currentUrl.searchParams.get('sortBy') || '';
-        recency.value = currentUrl.searchParams.get('daysSinceListed') || '';
-        delivery.value = currentUrl.searchParams.get('deliveryMethod') || '';
-        condition.value = currentUrl.searchParams.get('itemCondition') || '';
+        for (const [controlName, parameter] of Object.entries(URL_CONTROLS)) {
+          panel.querySelector(`[data-url-control="${controlName}"]`).value =
+            currentUrl.searchParams.get(parameter) || '';
+        }
         panel.dataset.fbmwControlsUrl = currentUrl.href;
       }
     }
@@ -954,7 +967,9 @@
 
     function captureResultOrder(listings) {
       if (listings.length === 0) return;
-      const items = listings.map(({ id, canonicalUrl }) => ({ id, url: canonicalUrl }));
+      const items = listings
+        .slice(0, NAVIGATION_ITEM_LIMIT)
+        .map(({ id, canonicalUrl }) => ({ id, url: canonicalUrl }));
       const sourceUrl = window.location.href;
       const next = { sourceUrl, items };
       if (JSON.stringify(data.navigation) === JSON.stringify(next)) return;
@@ -1097,6 +1112,8 @@
         importData();
       } else if (action === 'reset') {
         resetData();
+      } else if (action === 'undo') {
+        undoLastDataChange();
       }
     }
 
@@ -1131,28 +1148,19 @@
       const panel = document.querySelector('[data-fbmw-workspace]');
       if (!panel) return;
       const url = new URL(window.location.href);
-      updateUrlParameter(url, 'sortBy', panel.querySelector('[data-url-control="sort"]').value);
-      updateUrlParameter(
-        url,
-        'daysSinceListed',
-        panel.querySelector('[data-url-control="recency"]').value,
-      );
-      updateUrlParameter(
-        url,
-        'deliveryMethod',
-        panel.querySelector('[data-url-control="delivery"]').value,
-      );
-      updateUrlParameter(
-        url,
-        'itemCondition',
-        panel.querySelector('[data-url-control="condition"]').value,
-      );
+      for (const [controlName, parameter] of Object.entries(URL_CONTROLS)) {
+        updateUrlParameter(
+          url,
+          parameter,
+          panel.querySelector(`[data-url-control="${controlName}"]`).value,
+        );
+      }
       navigate(url.href);
     }
 
     function clearUrlControls() {
       const url = new URL(window.location.href);
-      MANAGED_URL_PARAMETERS.forEach((parameter) => url.searchParams.delete(parameter));
+      Object.values(URL_CONTROLS).forEach((parameter) => url.searchParams.delete(parameter));
       navigate(url.href);
     }
 
@@ -1272,6 +1280,7 @@
 
       try {
         const candidate = validateImport(JSON.parse(input));
+        captureUndo('import');
         data = candidate;
         seenBeforeSession = new Set(Object.keys(data.seen));
         persist();
@@ -1284,6 +1293,7 @@
 
     function resetData() {
       if (!window.confirm('Reset all Buyer workspace settings, listing decisions, and notes?')) return;
+      captureUndo('reset');
       GM_deleteValue(STORAGE_KEY);
       data = createDefaultData();
       seenBeforeSession = new Set();
@@ -1293,6 +1303,7 @@
 
     function clearListingData() {
       if (!window.confirm('Clear all listing decisions, favorites, hidden states, and notes?')) return;
+      captureUndo('listing clear');
       data.listings = {};
       persist();
       showDataMessage('Listing decisions and notes cleared.');
@@ -1301,10 +1312,26 @@
 
     function clearSeenHistory() {
       if (!window.confirm('Forget which Marketplace listings have been seen?')) return;
+      captureUndo('seen-history clear');
       data.seen = {};
       seenBeforeSession = new Set();
       persist();
       showDataMessage('Seen-listing history cleared.');
+      queueRender();
+    }
+
+    function captureUndo(label) {
+      undoSnapshot = { label, data: cloneData(data) };
+    }
+
+    function undoLastDataChange() {
+      if (!undoSnapshot) return;
+      const restored = undoSnapshot;
+      undoSnapshot = null;
+      data = restored.data;
+      seenBeforeSession = new Set(Object.keys(data.seen));
+      persist();
+      showDataMessage(`Undid ${restored.label}.`);
       queueRender();
     }
 
@@ -1438,6 +1465,10 @@
         .fbmw-listing-actions button[aria-pressed="true"] {
           background: var(--primary-button-background, #0866ff);
           color: var(--primary-button-text, #fff);
+        }
+        .fbmw-panel-body button:disabled {
+          cursor: default;
+          opacity: .55;
         }
         .fbmw-listing-actions [data-value="later"][aria-pressed="true"] {
           background: #f7b928;
@@ -1813,7 +1844,7 @@
 
     const items = [];
     const seen = new Set();
-    for (const item of navigation.items) {
+    for (const item of navigation.items.slice(0, NAVIGATION_ITEM_LIMIT)) {
       if (
         !isPlainObject(item) ||
         typeof item.id !== 'string' ||
@@ -2078,6 +2109,10 @@
 
   function setText(element, value) {
     if (element.textContent !== value) element.textContent = value;
+  }
+
+  function cloneData(value) {
+    return JSON.parse(JSON.stringify(value));
   }
 
   function escapeAttribute(value) {

@@ -360,6 +360,29 @@ test('mounts in the current Marketplace navigation region without relying on an 
   assert.equal(sidebar.querySelectorAll('a[href^="/saved/"]').length, 0);
 });
 
+test('reuses Facebook native Saved products links without adding a duplicate shortcut', async () => {
+  const { window } = facebookWindow(
+    'https://www.facebook.com/marketplace/search/?query=camera',
+    `<aside aria-label="Marketplace">
+      <h1>Marketplace</h1>
+      <nav>
+        <a href="/saved/?dashboard_section=PRODUCTS">Saved items</a>
+        <a href="/marketplace/create/item/">Create new listing</a>
+      </nav>
+    </aside>
+    <main><section aria-label="Marketplace results">${listing({ id: '1004', title: 'Canon camera' })}</section></main>`,
+  );
+
+  await runUserscript(window);
+
+  const savedLinks = window.document.querySelectorAll(
+    'a[href*="dashboard_section=PRODUCTS"]',
+  );
+  assert.equal(savedLinks.length, 1);
+  assert.equal(savedLinks[0].getAttribute('data-fbmw-saved-link'), 'native');
+  assert.equal(window.document.querySelectorAll('[data-fbmw-saved-link="fallback"]').length, 0);
+});
+
 test('dims sponsored and shipped listings by default and labels the reasons', async () => {
   const { window } = facebookWindow(
     'https://www.facebook.com/marketplace/search/?query=camera',
@@ -784,6 +807,29 @@ test('processes cards loaded after startup without adding duplicate controls', a
   });
 });
 
+test('debounces bursts of Marketplace mutations before rescanning listings', async () => {
+  const { window } = facebookWindow(
+    'https://www.facebook.com/marketplace/search/?query=camera',
+    resultsPage([listing({ id: '1603', title: 'First camera' })]),
+  );
+  await runUserscript(window);
+
+  const results = window.document.querySelector('[aria-label="Marketplace results"]');
+  results.insertAdjacentHTML('beforeend', listing({ id: '1604', title: 'Second camera' }));
+  await settle(15);
+  results.insertAdjacentHTML('beforeend', listing({ id: '1605', title: 'Third camera' }));
+  await settle(15);
+
+  assert.equal(
+    window.document.querySelectorAll('[data-fbmw-listing-actions]').length,
+    1,
+    'the first mutation does not trigger an immediate full rescan',
+  );
+  await waitFor(() => {
+    assert.equal(window.document.querySelectorAll('[data-fbmw-listing-actions]').length, 3);
+  });
+});
+
 test('fails open for uncertain wrappers and prefers a visible duplicate listing card', async () => {
   const { window } = facebookWindow(
     'https://www.facebook.com/marketplace/search/?query=camera',
@@ -1128,6 +1174,30 @@ test('selectively clears listing decisions without resetting filters or saved vi
     [...controlNamed(secondWorkspace, /^saved buyer views$/i).querySelectorAll('option')]
       .some((option) => option.textContent === 'Cameras'),
   );
+});
+
+test('undo restores the last destructive workspace data change', async () => {
+  const { window } = facebookWindow(
+    'https://www.facebook.com/marketplace/search/?query=camera',
+    resultsPage([listing({ id: '2330', title: 'Canon camera' })]),
+  );
+  await runUserscript(window);
+
+  const workspace = window.document.querySelector('[data-fbmw-workspace]');
+  const listingCard = card(window, '2330');
+  await setDisposition(window, listingCard, 'later');
+  await setControl(window, controlNamed(listingCard, /note/i), 'Check battery health');
+
+  buttonNamed(workspace, /clear listing (?:decisions|data)/i).click();
+  await settle();
+  assertDisposition(listingCard, '');
+  assert.equal(controlNamed(listingCard, /note/i).value, '');
+
+  buttonNamed(workspace, /undo listing clear/i).click();
+  await settle();
+  assertDisposition(listingCard, 'later');
+  assert.equal(controlNamed(listingCard, /note/i).value, 'Check battery health');
+  assert.equal(buttonNamed(workspace, /undo last data change/i).disabled, true);
 });
 
 test('exports and imports settings, buyer records, navigation, and saved views', async () => {

@@ -66,6 +66,7 @@ Name and save up to 12 buyer views. Each view keeps the current Marketplace sear
 - Clear listing decisions and notes without resetting filters, saved buyer views, or seen history.
 - Forget seen history without clearing listing decisions or other settings.
 - Reset the workspace only after confirmation.
+- Undo the most recent import, listing-decision clear, seen-history clear, or full reset while the page remains open.
 - Reject an invalid import without replacing the current data.
 
 ## Privacy, storage, and permissions
@@ -74,7 +75,7 @@ The script requests page access only for `www.facebook.com/marketplace/*` and `w
 
 Settings, filters, saved buyer views, seen listing IDs, states, notes, and navigation context stay in the userscript manager's local storage. Export creates a local JSON copy that can contain listing IDs, your notes, and captured Marketplace URLs. Treat that file as personal data. Removing the script's storage, using private browsing, or changing browser profiles can remove the workspace unless you exported a backup.
 
-Storage is bounded. The workspace keeps up to 2,000 nonempty listing records, 5,000 seen listing IDs, and 12 saved buyer views. Touching a listing decision or note moves that record to the newest end before old records are pruned.
+Storage is bounded. The workspace keeps up to 2,000 nonempty listing records, 5,000 seen listing IDs, 1,000 entries in the latest navigation snapshot, and 12 saved buyer views. Touching a listing decision or note moves that record to the newest end before old records are pruned.
 
 Facebook still receives its normal page requests. Applying URL controls or opening a listing behaves like using Facebook's own interface.
 
@@ -91,9 +92,12 @@ Facebook still receives its normal page requests. Applying URL controls or openi
 
 ## Manual test checklist
 
-### Validation performed for 1.0.1
+### Release-candidate validation for 1.0.2
 
-- `npm test` passes the repository validator, version check, syntax check, and 33 buyer-workspace behavior tests.
+- `npm test` passes the repository validator, version check, syntax check, and 36 buyer-workspace behavior tests.
+- The mutation pipeline waits for a short quiet period before rescanning, and its regression test confirms a burst is coalesced instead of scanning immediately after each mutation.
+- Native `/marketplace/you/saved` and `/saved/?dashboard_section=PRODUCTS` rows are both reused without adding a duplicate shortcut.
+- Destructive local data operations expose one in-page undo; automated coverage confirms listing decisions and notes return after a clear and undo.
 - A signed-in Facebook desktop session at 1280 by 800 was checked on Marketplace home, a Marketplace search, and Saved products in dark mode.
 - The focused 1.0.1 live check recognized 20 current div-based cards and dimmed all eight loaded Ships to you cards. Turning the option off restored them and turning it back on dimmed them again.
 - The live card toolbar stayed at the same 439.07-pixel card height after changing Buyer status, opening More buyer actions, and toggling Favorite. Hide, Include listings hidden by me, and Unhide were also exercised end to end.
@@ -102,7 +106,7 @@ Facebook still receives its normal page requests. Applying URL controls or openi
 - The live Saved-products check confirmed one 360 by 52 Back to Marketplace row and no leaked workspace or card controls.
 - The shared Facebook page was reloaded after browser checks, so injected test UI and in-memory test data were removed.
 
-The remaining checklist is intentionally retained for cross-device userscript-manager acceptance and future Facebook regressions.
+The checklist below is retained for future Facebook regressions and additional device coverage. It is not a claim that every browser, language, zoom level, or Facebook experiment was exercised for this release candidate.
 
 ### Setup and startup
 
@@ -204,7 +208,7 @@ The remaining checklist is intentionally retained for cross-device userscript-ma
 
 ## Greasy Fork status
 
-- Status: draft
+- Status: ready for first import
 - Listing: pending
 - Raw source: [GitHub raw URL](https://raw.githubusercontent.com/austinpresley/tampermonkey-scripts/main/scripts/facebook-marketplace-buyer-workspace/facebook-marketplace-buyer-workspace.user.js)
 
