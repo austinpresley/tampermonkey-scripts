@@ -14,6 +14,7 @@ Before editing, read `docs/DEVELOPMENT.md`, `userscripts.json`, and the affected
 - Test affected behavior in proportion to risk and run `npm test` before committing.
 - Never commit credentials, API keys, Greasy Fork cookies, webhook secrets, or cached Codex files.
 - Use a focused branch and pull request for normal work. Do not merge without user authorization.
+- For cross-device testing, follow [`docs/REMOTE_TESTING.md`](docs/REMOTE_TESTING.md). Deliver a tested, pushed non-`main` build with `npm run test-url -- <slug>` instead of stopping at a local path or pasting a large script into chat.
 - Never push or merge a broken userscript, and never claim publication until Greasy Fork confirms it.
 
 Only `main` is publishable. A push to `main` can notify Greasy Fork for already registered scripts.

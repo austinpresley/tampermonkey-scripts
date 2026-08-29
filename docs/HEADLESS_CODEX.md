@@ -40,3 +40,7 @@ For programmatic workflows such as private CI, API-key authentication is the rec
 - Keep tasks narrow and run `npm test` before proposing a commit.
 
 Current official guidance: [Codex authentication](https://learn.chatgpt.com/docs/auth) and [non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode).
+
+## Test on another computer
+
+When the browser used for testing is not on the headless machine, follow the repository's [cross-device testing workflow](REMOTE_TESTING.md). It uses a pushed feature branch and a direct Tampermonkey install URL, so script size does not matter.

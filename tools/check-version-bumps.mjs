@@ -10,12 +10,19 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const semverPattern = /^\d+\.\d+\.\d+$/;
 
 function git(args, options = {}) {
-  return execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...options }).trim();
+  const { trim = true, ...execOptions } = options;
+  const output = execFileSync('git', args, {
+    cwd: root,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    ...execOptions,
+  });
+  return trim ? output.trim() : output;
 }
 
-function tryGit(args) {
+function tryGit(args, options) {
   try {
-    return git(args);
+    return git(args, options);
   } catch {
     return null;
   }
@@ -91,7 +98,7 @@ let compared = 0;
 let newFiles = 0;
 for (const absolutePath of files) {
   const path = relative(root, absolutePath).split(sep).join('/');
-  const previous = tryGit(['show', `${base}:${path}`]);
+  const previous = tryGit(['show', `${base}:${path}`], { trim: false });
   const current = await readFile(absolutePath, 'utf8');
   const currentVersion = versionFrom(current);
   if (!currentVersion || !semverPattern.test(currentVersion)) {

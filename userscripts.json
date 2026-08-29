@@ -48,6 +48,14 @@
       "namespace": "https://depop.com/",
       "namespaceReason": "Preserved from the published Greasy Fork script.",
       "license": "MIT"
+    },
+    {
+      "slug": "facebook-marketplace-buyer-workspace",
+      "name": "Facebook Marketplace Buyer Workspace",
+      "path": "scripts/facebook-marketplace-buyer-workspace/facebook-marketplace-buyer-workspace.user.js",
+      "greasyForkId": null,
+      "greasyForkUrl": null,
+      "status": "ready"
     }
   ]
 }
