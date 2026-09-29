@@ -13,9 +13,21 @@ function git(args, options = {}) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...options }).trim();
 }
 
+function gitRaw(args, options = {}) {
+  return execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...options });
+}
+
 function tryGit(args) {
   try {
     return git(args);
+  } catch {
+    return null;
+  }
+}
+
+function tryGitRaw(args) {
+  try {
+    return gitRaw(args);
   } catch {
     return null;
   }
@@ -91,7 +103,7 @@ let compared = 0;
 let newFiles = 0;
 for (const absolutePath of files) {
   const path = relative(root, absolutePath).split(sep).join('/');
-  const previous = tryGit(['show', `${base}:${path}`]);
+  const previous = tryGitRaw(['show', `${base}:${path}`]);
   const current = await readFile(absolutePath, 'utf8');
   const currentVersion = versionFrom(current);
   if (!currentVersion || !semverPattern.test(currentVersion)) {
