@@ -2,15 +2,11 @@
 // @name         StreetEasy: Open in Google Maps
 // @namespace    https://github.com/austinpresley/tampermonkey-scripts
 // @version      1.0.0
-// @description  Adds Google Maps buttons to StreetEasy listings and property cards using each property's street address.
+// @description  Adds a StreetEasy-style button that searches Google Maps for the listing's written address.
 // @match        https://streeteasy.com/building/*
 // @match        https://streeteasy.com/property/*
-// @match        https://streeteasy.com/for-sale/*
-// @match        https://streeteasy.com/for-rent/*
 // @match        https://www.streeteasy.com/building/*
 // @match        https://www.streeteasy.com/property/*
-// @match        https://www.streeteasy.com/for-sale/*
-// @match        https://www.streeteasy.com/for-rent/*
 // @grant        none
 // @run-at       document-idle
 // @license      MIT
@@ -22,13 +18,7 @@
   'use strict';
 
   const SCRIPT_ID = 'streeteasy-google-maps';
-  const BUTTON_CLASS = `${SCRIPT_ID}-button`;
-  const CARD_BUTTON_CLASS = `${SCRIPT_ID}-card-button`;
   const ADDRESS_PATTERN = /\b\d{1,6}(?:-\d{1,6})?\s+[A-Za-z0-9.' -]{2,70},\s*[A-Za-z.' -]{2,40},\s*(?:NY|NJ)\s+\d{5}(?:-\d{4})?\b/i;
-  const LISTING_PATH_PATTERN = /^\/(?:building\/[^/]+(?:\/[^/]+)?|property\/[^/]+)\/?$/;
-  const DETAIL_PATH_PATTERN = /^\/(?:building|property)\//;
-  const LOCATION_LABEL_PATTERN = /\b(?:condo|co-op|house|rental unit|townhouse|multi-family home|two-family home|other type|building)\s+in\s+(.+)$/i;
-
   let refreshTimer = 0;
 
   function normalizeText(value) {
@@ -39,176 +29,70 @@
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
   }
 
-  function pinIcon() {
-    return `
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M12 21s6-5.15 6-11a6 6 0 1 0-12 0c0 5.85 6 11 6 11Z"></path>
-        <circle cx="12" cy="10" r="2.25"></circle>
-      </svg>
-    `;
-  }
-
   function addStyles() {
     if (document.getElementById(`${SCRIPT_ID}-styles`)) return;
 
     const style = document.createElement('style');
     style.id = `${SCRIPT_ID}-styles`;
     style.textContent = `
-      .${BUTTON_CLASS} {
+      #${SCRIPT_ID}-button {
         box-sizing: border-box;
-        display: inline-flex;
+        display: flex;
+        width: 100%;
+        height: 40px;
         align-items: center;
         justify-content: center;
-        gap: 7px;
-        min-height: 36px;
-        border: 1px solid #1a73e8;
-        border-radius: 999px;
-        padding: 7px 13px;
-        color: #fff !important;
-        background: #1a73e8;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        font-size: 13px;
-        font-weight: 650;
-        line-height: 1.2;
-        text-decoration: none !important;
-        white-space: nowrap;
-        box-shadow: 0 2px 7px rgba(0, 0, 0, .16);
-        transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
-      }
-
-      .${BUTTON_CLASS}:hover {
-        border-color: #1557b0;
-        background: #1557b0;
-      }
-
-      .${BUTTON_CLASS}:active { transform: translateY(1px); }
-      .${BUTTON_CLASS}:focus-visible { outline: 3px solid rgba(26, 115, 232, .35); outline-offset: 2px; }
-      .${BUTTON_CLASS} svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; }
-
-      .${CARD_BUTTON_CLASS} {
-        min-height: 28px;
-        margin-inline-start: 8px;
-        padding: 4px 9px;
-        font-size: 12px;
-        vertical-align: middle;
-        box-shadow: none;
-      }
-
-      .${CARD_BUTTON_CLASS} svg { width: 14px; height: 14px; }
-
-      #${SCRIPT_ID}-primary {
-        position: fixed;
-        z-index: 2147483000;
-        right: 22px;
-        bottom: 22px;
-        min-height: 44px;
-        padding: 10px 17px;
+        gap: 8px;
+        border: 1px solid #949494;
+        border-radius: 0;
+        padding: 0 24px;
+        color: #0041d9 !important;
+        background: #fff;
+        font-family: "Source Sans Pro", Helvetica, Arial, Geneva, sans-serif;
         font-size: 14px;
-        box-shadow: 0 5px 18px rgba(0, 0, 0, .24);
+        font-weight: 700;
+        line-height: 20px;
+        text-decoration: none !important;
+        cursor: pointer;
       }
 
-      @media (max-width: 640px) {
-        #${SCRIPT_ID}-primary {
-          right: 12px;
-          bottom: 12px;
-        }
+      #${SCRIPT_ID}-button:hover {
+        border-color: #0041d9;
+        background: #f7f9ff;
+      }
+
+      #${SCRIPT_ID}-button:active { background: #edf2ff; }
+      #${SCRIPT_ID}-button:focus-visible { outline: 2px solid #0041d9; outline-offset: 2px; }
+
+      #${SCRIPT_ID}-button svg {
+        width: 16px;
+        height: 16px;
+        flex: 0 0 auto;
+        fill: currentColor;
+      }
+
+      #${SCRIPT_ID}-button.${SCRIPT_ID}-address-fallback {
+        width: fit-content;
+        margin-top: 12px;
       }
     `;
     document.head.append(style);
   }
 
-  function createButton(label, href, extraClass = '') {
+  function createButton(href) {
     const button = document.createElement('a');
-    button.className = `${BUTTON_CLASS}${extraClass ? ` ${extraClass}` : ''}`;
+    button.id = `${SCRIPT_ID}-button`;
     button.href = href;
     button.target = '_blank';
     button.rel = 'noopener noreferrer';
-    button.setAttribute('aria-label', `${label} in a new tab`);
-    button.innerHTML = `${pinIcon()}<span>${label}</span>`;
-    button.addEventListener('click', (event) => event.stopPropagation());
-    button.addEventListener('mousedown', (event) => event.stopPropagation());
+    button.setAttribute('aria-label', 'Open this address in Google Maps in a new tab');
+    button.innerHTML = `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Zm0 10.25A3.25 3.25 0 1 1 12 5.75a3.25 3.25 0 0 1 0 6.5Z"></path>
+      </svg>
+      <span>Open in Google Maps</span>
+    `;
     return button;
-  }
-
-  function isStreetEasyListingLink(anchor) {
-    try {
-      const url = new URL(anchor.href, window.location.href);
-      return /^(?:www\.)?streeteasy\.com$/i.test(url.hostname)
-        && LISTING_PATH_PATTERN.test(url.pathname);
-    } catch {
-      return false;
-    }
-  }
-
-  function looksLikeListingTitle(text) {
-    return /^\d{1,6}(?:-\d{1,6})?\s+\S/.test(text) || /\s#\S+$/.test(text);
-  }
-
-  function directText(element) {
-    return normalizeText(
-      Array.from(element.childNodes)
-        .filter((node) => node.nodeType === Node.TEXT_NODE)
-        .map((node) => node.textContent)
-        .join(' '),
-    );
-  }
-
-  function findCardLocation(anchor) {
-    let container = anchor.parentElement;
-
-    for (let depth = 0; container && depth < 7; depth += 1, container = container.parentElement) {
-      const candidates = Array.from(container.querySelectorAll('div, p, span'));
-      for (const candidate of candidates) {
-        const texts = [directText(candidate), normalizeText(candidate.textContent)];
-        for (const text of texts) {
-          const match = text.length <= 90 ? text.match(LOCATION_LABEL_PATTERN) : null;
-          if (match) return normalizeText(match[1]);
-        }
-      }
-
-      const containerText = normalizeText(container.textContent);
-      if (/\bListing by\b|\b(?:bed|bath)s?\b|\$[\d,.]+/i.test(containerText)) break;
-    }
-
-    return '';
-  }
-
-  function cardMapQuery(anchor, title) {
-    const streetAddress = title.replace(/\s+#\S+$/, '');
-    const location = findCardLocation(anchor);
-    return location ? `${streetAddress}, ${location}` : `${streetAddress}, New York metropolitan area`;
-  }
-
-  function enhanceListingCards() {
-    const anchors = document.querySelectorAll('a[href]');
-    const currentTitle = pageListingTitle();
-
-    for (const anchor of anchors) {
-      if (anchor.closest(`.${BUTTON_CLASS}, header, nav, footer`)) continue;
-      if (!isStreetEasyListingLink(anchor)) continue;
-
-      const title = normalizeText(anchor.textContent);
-      if (!looksLikeListingTitle(title)) continue;
-      if (DETAIL_PATH_PATTERN.test(window.location.pathname) && title === currentTitle) continue;
-
-      const source = `${anchor.href}|${title}`;
-      if (anchor.dataset.streeteasyMapsSource === source) continue;
-
-      if (anchor.nextElementSibling?.classList.contains(CARD_BUTTON_CLASS)) {
-        anchor.nextElementSibling.remove();
-      }
-      const button = createButton('Map', mapsSearchUrl(cardMapQuery(anchor, title)), CARD_BUTTON_CLASS);
-      button.title = `Open ${title} in Google Maps`;
-      anchor.insertAdjacentElement('afterend', button);
-      anchor.dataset.streeteasyMapsSource = source;
-    }
-  }
-
-  function findExistingMapUrl() {
-    const links = Array.from(document.querySelectorAll('a[href*="google.com/maps"]'));
-    const exactLink = links.find((link) => normalizeText(link.textContent).toLowerCase() === 'view on google maps');
-    const coordinateLink = links.find((link) => /\/maps\/(?:place|search)\/-?\d+(?:\.\d+)?(?:%2C|,)-?\d+/i.test(link.href));
-    return exactLink?.href || coordinateLink?.href || '';
   }
 
   function formatPostalAddress(address) {
@@ -232,6 +116,11 @@
     }
 
     for (const child of Object.values(value)) collectStructuredAddresses(child, results);
+  }
+
+  function pageListingTitle() {
+    const titlePrefix = normalizeText(document.title.split(' in ')[0]).replace(/^StreetEasy:\s*/i, '');
+    return normalizeText(titlePrefix.match(/\bat\s+(.+)$/i)?.[1] || titlePrefix);
   }
 
   function findStructuredAddress() {
@@ -271,58 +160,55 @@
     return null;
   }
 
-  function pageListingTitle() {
-    const titlePrefix = normalizeText(document.title.split(' in ')[0]).replace(/^StreetEasy:\s*/i, '');
-    return normalizeText(titlePrefix.match(/\bat\s+(.+)$/i)?.[1] || titlePrefix);
-  }
-
   function titleAddress() {
-    const title = pageListingTitle();
-    if (!looksLikeListingTitle(title)) return '';
-    return `${title.replace(/\s+#\S+$/, '')}, New York metropolitan area`;
+    const title = pageListingTitle().replace(/\s+#\S+$/, '');
+    const match = title.match(/^\d{1,6}(?:-\d{1,6})?\s+\S.*$/);
+    return match ? `${match[0]}, New York metropolitan area` : '';
   }
 
-  function addAddressButton(addressInfo, href) {
-    const { element } = addressInfo ?? {};
-    if (!element || element.dataset.streeteasyMapsAddressButton === 'true') return;
+  function findActionHost() {
+    const contactBox = document.querySelector('[data-testid="contactbox-cta"]');
+    const contactButton = contactBox
+      ? Array.from(contactBox.querySelectorAll('button')).find((button) => /^(?:contact agent|request a tour|ask a question)$/i.test(normalizeText(button.textContent)))
+      : null;
 
-    const button = createButton('Open in Google Maps', href);
-    button.style.marginInlineStart = '10px';
-    button.style.marginBlock = '6px';
-    element.insertAdjacentElement('afterend', button);
-    element.dataset.streeteasyMapsAddressButton = 'true';
+    return contactButton?.parentElement ?? null;
   }
 
-  function updatePrimaryButton() {
-    let primaryButton = document.getElementById(`${SCRIPT_ID}-primary`);
-    if (!DETAIL_PATH_PATTERN.test(window.location.pathname)) {
-      primaryButton?.remove();
-      return;
-    }
-
+  function updateButton() {
     const addressInfo = findBuildingSectionAddress();
     const address = addressInfo?.address || findStructuredAddress() || titleAddress();
-    const href = findExistingMapUrl() || (address ? mapsSearchUrl(address) : '');
-    if (!href) {
-      primaryButton?.remove();
+    let button = document.getElementById(`${SCRIPT_ID}-button`);
+
+    if (!address) {
+      button?.remove();
       return;
     }
 
-    if (!primaryButton) {
-      primaryButton = createButton('Open in Google Maps', href);
-      primaryButton.id = `${SCRIPT_ID}-primary`;
-      document.body.append(primaryButton);
+    const href = mapsSearchUrl(address);
+    const actionHost = findActionHost();
+    if (!button) button = createButton(href);
+
+    button.href = href;
+    button.title = `Open ${address} in Google Maps`;
+
+    if (actionHost) {
+      button.classList.remove(`${SCRIPT_ID}-address-fallback`);
+      if (button.parentElement !== actionHost) actionHost.append(button);
+      return;
     }
 
-    primaryButton.href = href;
-    primaryButton.title = address ? `Open ${address} in Google Maps` : 'Open this listing in Google Maps';
-    addAddressButton(addressInfo, href);
+    if (addressInfo?.element) {
+      button.classList.add(`${SCRIPT_ID}-address-fallback`);
+      if (button.previousElementSibling !== addressInfo.element) {
+        addressInfo.element.insertAdjacentElement('afterend', button);
+      }
+    }
   }
 
   function refresh() {
     addStyles();
-    enhanceListingCards();
-    updatePrimaryButton();
+    updateButton();
   }
 
   function scheduleRefresh() {

@@ -2,30 +2,28 @@
 
 ## Purpose
 
-Adds an **Open in Google Maps** button to StreetEasy property pages and a compact **Map** button beside listings on search and recommendation pages.
+Adds an **Open in Google Maps** button to StreetEasy property pages. The button sits with StreetEasy's listing actions and matches the site's type, color, size, and square-cornered controls.
 
-On a property page, the script uses StreetEasy's exact map coordinates when they are available. It falls back to the building's full postal address. Card buttons use the street address and neighborhood shown by StreetEasy.
+The Google Maps URL contains the written street address, city, state, and ZIP code shown under **About the building**. It never substitutes latitude and longitude coordinates.
 
 ## Supported pages
 
 - `https://streeteasy.com/building/*`
 - `https://streeteasy.com/property/*`
-- `https://streeteasy.com/for-sale/*`
-- `https://streeteasy.com/for-rent/*`
 - The same paths on `www.streeteasy.com`
 
 ## Permissions and privacy
 
-The script uses no privileged userscript APIs and makes no background network requests. When you click a button, your browser sends the displayed address or StreetEasy's map coordinates to Google Maps.
+The script uses no privileged userscript APIs and makes no background network requests. When you click the button, your browser sends the displayed address to Google Maps.
 
 ## Testing notes
 
-- [ ] Open a current sale listing and confirm the fixed button opens the listing's exact building coordinates in a new Google Maps tab.
-- [ ] Confirm a second button appears beside the full address under **About the building**.
+- [ ] Open a current sale listing and confirm one **Open in Google Maps** button appears below the main contact action.
+- [ ] Confirm the button matches StreetEasy's secondary button style and does not float over the page.
+- [ ] Confirm the Google Maps URL contains the written street address rather than coordinates.
 - [ ] Open a current rental listing and repeat the checks.
-- [ ] Open sale and rental result pages and confirm each address has one **Map** button.
-- [ ] Confirm result-page buttons include the displayed neighborhood or city in the Google Maps query.
-- [ ] Load more results or navigate within StreetEasy and confirm newly rendered listings receive buttons without duplicates.
+- [ ] Confirm search results and recommendation cards do not receive **Map** buttons.
+- [ ] Navigate between listings and confirm the button updates without creating duplicates.
 - [ ] Confirm the script adds no button when it cannot identify a listing address.
 
 ## Greasy Fork status
