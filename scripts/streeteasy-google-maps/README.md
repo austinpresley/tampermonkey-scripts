@@ -28,7 +28,7 @@ The script uses no privileged userscript APIs and makes no background network re
 
 ## Greasy Fork status
 
-- Status: draft
+- Status: ready for initial Greasy Fork import
 - Listing: pending
 - Raw source: [GitHub raw URL](https://raw.githubusercontent.com/austinpresley/tampermonkey-scripts/main/scripts/streeteasy-google-maps/streeteasy-google-maps.user.js)
 
