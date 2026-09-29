@@ -12,7 +12,7 @@ Small browser enhancements for sites and tools I use. Install them through [Grea
 | [Google Slides: Open/Download selected images](scripts/google-slides-image-actions/README.md) | Google Slides | Opens or downloads one or more selected slide images from the right-click menu. | [Greasy Fork](https://greasyfork.org/en/scripts/559190-google-slides-open-download-selected-images) |
 | [Pinterest Board Image Downloader](scripts/pinterest-board-image-downloader/README.md) | Pinterest | Scans a board, optionally loads more pins, and downloads the collected images. | [Greasy Fork](https://greasyfork.org/en/scripts/563977-pinterest-board-image-downloader) |
 | [Depop Gallery Zoom](scripts/depop-gallery-zoom/README.md) | Depop | Adds a full-screen gallery with zoom, pan, thumbnails, keyboard controls, and touch gestures. | [Greasy Fork](https://greasyfork.org/en/scripts/591977-depop-gallery-zoom) |
-| [StreetEasy: Open in Google Maps](scripts/streeteasy-google-maps/README.md) | StreetEasy | Opens the listing's written address in Google Maps from a StreetEasy-style action. | [GitHub](https://raw.githubusercontent.com/austinpresley/tampermonkey-scripts/main/scripts/streeteasy-google-maps/streeteasy-google-maps.user.js) |
+| [StreetEasy: Open in Google Maps](scripts/streeteasy-google-maps/README.md) | StreetEasy | Opens the listing's written address in Google Maps from a StreetEasy-style action. | [Greasy Fork](https://greasyfork.org/en/scripts/597907-streeteasy-open-in-google-maps) |
 
 ## Install a script
 

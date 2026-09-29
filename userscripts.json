@@ -53,9 +53,9 @@
       "slug": "streeteasy-google-maps",
       "name": "StreetEasy: Open in Google Maps",
       "path": "scripts/streeteasy-google-maps/streeteasy-google-maps.user.js",
-      "greasyForkId": null,
-      "greasyForkUrl": null,
-      "status": "ready"
+      "greasyForkId": 597907,
+      "greasyForkUrl": "https://greasyfork.org/en/scripts/597907-streeteasy-open-in-google-maps",
+      "status": "published"
     }
   ]
 }

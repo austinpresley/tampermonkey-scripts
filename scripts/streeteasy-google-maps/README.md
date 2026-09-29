@@ -28,8 +28,6 @@ The script uses no privileged userscript APIs and makes no background network re
 
 ## Greasy Fork status
 
-- Status: ready for initial Greasy Fork import
-- Listing: pending
+- Status: published
+- Listing: [Greasy Fork script 597907](https://greasyfork.org/en/scripts/597907-streeteasy-open-in-google-maps)
 - Raw source: [GitHub raw URL](https://raw.githubusercontent.com/austinpresley/tampermonkey-scripts/main/scripts/streeteasy-google-maps/streeteasy-google-maps.user.js)
-
-Do not mark this script published until its Greasy Fork listing confirms publication.
